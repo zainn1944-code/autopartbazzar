@@ -21,6 +21,21 @@ const VISUAL_THEMES = {
     glow: "rgba(168, 85, 247, 0.25)",
     label: "Brake system",
   },
+  Filters: {
+    accent: "#22c55e",
+    glow: "rgba(34, 197, 94, 0.25)",
+    label: "Clean airflow",
+  },
+  Lights: {
+    accent: "#38bdf8",
+    glow: "rgba(56, 189, 248, 0.25)",
+    label: "Powered part",
+  },
+  "Body Parts": {
+    accent: "#ef4444",
+    glow: "rgba(239, 68, 68, 0.28)",
+    label: "Body kit",
+  },
   default: {
     accent: "#94a3b8",
     glow: "rgba(148, 163, 184, 0.22)",
@@ -98,9 +113,7 @@ const ProductVisual = ({
           <h3 className={compact ? "text-sm font-semibold" : "text-lg font-semibold leading-snug"}>
             {name}
           </h3>
-          <p className="mt-2 text-xs text-white/55">
-            Web-sourced listing with local fallback visual.
-          </p>
+          <p className="mt-2 text-xs text-white/55">AutoPart Bazaar product preview.</p>
         </div>
       </div>
     </div>

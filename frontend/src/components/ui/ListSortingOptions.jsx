@@ -4,7 +4,7 @@ import React from "react";
 
 const SortingOptions = ({ sortBy, setSortBy, setViewMode, viewMode }) => {
   return (
-    <div className="flex items-center justify-between mb-4">
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-gray-800 bg-gray-900 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center space-x-2">
         <label htmlFor="sortBy" className="text-gray-100">
           Sort By:

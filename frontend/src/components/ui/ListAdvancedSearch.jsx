@@ -26,7 +26,7 @@ const AdvancedSearch = ({ filters, setFilters, products = [] }) => {
   }, [filters.keyword]);
 
   return (
-    <div className="w-full max-w-xs md:max-w-sm bg-[#0a0a0a] text-gray-400 p-4 border-r border-gray-600 h-screen overflow-y-auto">
+    <div className="w-full rounded-2xl border border-gray-800 bg-[#0a0a0a] p-4 text-gray-400 shadow-[0_20px_60px_rgba(0,0,0,0.35)] lg:sticky lg:top-24">
       <h2 className="text-lg font-bold text-gray-100 mb-6">{dynamicHeading}</h2>
 
       {/* Search by Keyword */}

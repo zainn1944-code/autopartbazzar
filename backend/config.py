@@ -1,9 +1,13 @@
 from functools import lru_cache
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+ENV_FILE = Path(__file__).resolve().parent / ".env"
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
     database_url: str = "postgresql+asyncpg://user:password@localhost:5432/autopart"
     secret_key: str = "change-me-in-production"
