@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import axiosInstance from "@/api/axiosInstance";
 import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
@@ -24,14 +24,13 @@ const Home = () => {
   const [error, setError] = useState(null);
   const [productsToShow, setProductsToShow] = useState(6);
 
-  // ✅ Fetch products from the backend
   useEffect(() => {
     const fetchProducts = async () => {
       try {
         const { data } = await axiosInstance.get("/products");
         setProducts(data.products || []);
-      } catch (error) {
-        setError(error.response?.data?.detail || error.message);
+      } catch (requestError) {
+        setError(requestError.response?.data?.detail || requestError.message);
       } finally {
         setLoading(false);
       }
@@ -40,7 +39,6 @@ const Home = () => {
     fetchProducts();
   }, []);
 
-  // ✅ Apply filters
   const filteredProducts = products.filter((product) => {
     return (
       (!filters.keyword ||
@@ -55,62 +53,74 @@ const Home = () => {
     );
   });
 
-  // ✅ Apply sorting
   const sortedProducts = [...filteredProducts].sort((a, b) =>
     sortBy === "priceLow" ? a.price - b.price : b.price - a.price
   );
 
-  // ✅ Limit products displayed
   const productsToDisplay = sortedProducts.slice(0, productsToShow);
 
-  // ✅ Load more products
   const handleSeeMore = () => setProductsToShow((prev) => prev + 6);
 
-  if (loading)
+  if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <p>Loading...</p>
       </div>
     );
+  }
 
-  if (error)
+  if (error) {
     return (
-      <div className="flex justify-center items-center min-h-screen text-red-500">
+      <div className="flex min-h-screen items-center justify-center text-red-500">
         <p>{error}</p>
       </div>
     );
+  }
 
   return (
     <>
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex space-x-6">
-          <div className="w-1/4">
+      <div className="min-h-screen bg-black">
+        <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-6">
+          <h1 className="text-3xl font-semibold text-gray-100">Browse Parts</h1>
+          <p className="mt-2 text-sm text-gray-400">
+            Explore live inventory from the backend and narrow it down by make, city, category, and price.
+          </p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <div className="lg:min-w-0">
             <AdvancedSearch
               filters={filters}
               setFilters={setFilters}
               products={products}
             />
           </div>
-          <div className="flex-1">
+
+          <div className="min-w-0">
             <SortingOptions
               sortBy={sortBy}
               setSortBy={setSortBy}
               setViewMode={setViewMode}
               viewMode={viewMode}
             />
+            <div className="mb-4 text-sm text-gray-400">
+              Showing {productsToDisplay.length} of {sortedProducts.length} matching products
+            </div>
             <ProductGrid products={productsToDisplay} viewMode={viewMode} />
             {productsToDisplay.length < sortedProducts.length && (
-              <div className="text-right mt-6">
+              <div className="mt-6 text-right">
                 <button
                   onClick={handleSeeMore}
-                  className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-700 transition-all"
+                  className="rounded bg-red-500 px-4 py-2 text-white transition-all hover:bg-red-700"
                 >
                   See More
                 </button>
               </div>
             )}
           </div>
+        </div>
         </div>
       </div>
       <Footer />
@@ -119,4 +129,3 @@ const Home = () => {
 };
 
 export default Home;
-

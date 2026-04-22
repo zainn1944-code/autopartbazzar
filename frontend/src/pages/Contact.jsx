@@ -55,7 +55,7 @@ const Home = () => {
     <>
       <Navbar />
 
-      <section className="bg-2A2A2A text-white py-16">
+      <section className="bg-black text-white py-16">
         <div className="max-w-6xl mx-auto px-6">
           <h2 className="text-4xl font-bold text-center mb-6">Contact Us</h2>
           <p className="text-center mb-8 text-gray-300">
@@ -151,8 +151,8 @@ const Home = () => {
                 <FaMapMarkerAlt className="text-red-500 text-2xl" />
                 <div>
                   <h3 className="text-lg font-bold">Address</h3>
-                  <p>FAST Chiniot Faislabad</p>
-                  <p>Sargodha road, Zip Code: 35400</p>
+                  <p>University of South Asia, Cantt Lahore</p>
+                  <p>Zip Code: 54900</p>
                 </div>
               </div>
               <div className="flex items-start space-x-4">
@@ -160,7 +160,7 @@ const Home = () => {
                 <div>
                   <h3 className="text-lg font-bold">Call Us</h3>
                   <p>Call us to speak to a member of our team. We are always happy to help.</p>
-                  <p className="text-red-500 font-bold">+92-3096107599</p>
+                  <p className="text-red-500 font-bold">03316162015</p>
                 </div>
               </div>
             </div>

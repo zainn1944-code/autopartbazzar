@@ -11,22 +11,16 @@ const Home = () => {
   // Team members data
   const people = [
     {
-      name: 'Abubakar Sohail',
+      name: 'Zain Nasir',
       role: 'CEO',
-      imageUrl:
-        '/Images/bakar.JPG',
     },
     {
-      name: 'Muhammad Haaris',
+      name: 'Soman',
       role: 'CTO',
-      imageUrl:
-        '/Images/haaris.jpg',
     },
     {
-      name: 'Ahmad Ali',
+      name: 'Haris Virk',
       role: 'Lead Designer',
-      imageUrl:
-        '/Images/ahmad.webp',
     },
   ];
 
@@ -51,7 +45,7 @@ const Home = () => {
       <Navbar />
 
       {/* Hero Section */}
-      <section className="bg-#2A2A2A text-white py-24">
+      <section className="bg-black text-white py-24">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="grid lg:grid-cols-2 grid-cols-1 gap-8">
             <div className="flex flex-col justify-start items-center lg:items-start gap-10">
@@ -87,25 +81,23 @@ const Home = () => {
       </section>
 
       {/* Our Team Section */}
-      <section className="bg-#2A2A2A py-24 sm:py-32">
+      <section className="bg-black py-24 sm:py-32">
         <div className="mx-auto grid max-w-7xl gap-20 px-6 lg:px-8 xl:grid-cols-3">
           <div className="max-w-xl">
             <h2 className="text-white text-3xl font-semibold tracking-tight sm:text-4xl">
               Our Team
             </h2>
             <p className="mt-6 text-lg text-gray-300">
-              We're Fast CFD devs passionate to revolutionize the automotive industry, taking each step towards innovation.
+              We are a driven team committed to reshaping the automotive experience through bold ideas, thoughtful design, and meaningful innovation.
             </p>
           </div>
           <ul role="list" className="grid gap-x-8 gap-y-12 sm:grid-cols-2 sm:gap-y-16 xl:col-span-2">
             {people.map((person) => (
               <li key={person.name}>
                 <div className="flex items-center gap-x-6">
-                  <img
-                    alt={person.name}
-                    src={person.imageUrl}
-                    className="w-16 h-16 rounded-full object-cover"
-                  />
+                  <div className="h-16 w-16 rounded-full border border-gray-700 bg-gray-900 flex items-center justify-center text-xl font-semibold text-red-500">
+                    {person.name.charAt(0)}
+                  </div>
                   <div>
                     <h3 className="text-white text-base font-semibold tracking-tight">{person.name}</h3>
                     <p className="text-red-600 text-sm font-semibold">{person.role}</p>
