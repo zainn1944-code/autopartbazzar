@@ -42,3 +42,7 @@ Thumbs.db
 
 # Local runtime files
 *.log
+
+# Temporary downloads / scratch folders
+tmp_downloads/
+tmp/

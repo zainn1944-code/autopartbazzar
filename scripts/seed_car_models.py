@@ -20,7 +20,7 @@ CAR_MODELS = [
         "make": "Toyota",
         "car": "Corolla",
         "model": 2022.0,
-        "model_url": "",
+        "model_url": "/carmodels/corolla2.glb",
         "source_url": "https://sketchfab.com/3d-models/toyota-corolla-4703efa36e4b4aa9a342db3153ce3edd",
     },
     {

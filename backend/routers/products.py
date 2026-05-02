@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models.product import Product
 from schemas.product import ProductResponse, ProductUpdate
-from services.s3_upload import upload_product_image
+from services.s3_upload import store_product_image
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -20,12 +20,16 @@ async def _get_product_by_ref(db: AsyncSession, ref: str) -> Product | None:
     return r.scalar_one_or_none()
 
 
+async def _next_product_id(db: AsyncSession) -> str:
+    r = await db.execute(select(Product.product_id))
+    numeric_ids = [int(product_id) for product_id in r.scalars().all() if product_id and product_id.isdigit()]
+    return str(max(numeric_ids, default=0) + 1)
+
+
 @router.get("")
 async def list_products(db: AsyncSession = Depends(get_db)):
-    r = await db.execute(select(Product))
+    r = await db.execute(select(Product).order_by(Product.id.asc()))
     rows = r.scalars().all()
-    if not rows:
-        raise HTTPException(status_code=404, detail="No products found")
     return {"products": [ProductResponse.from_product(p).model_dump() for p in rows]}
 
 
@@ -39,6 +43,7 @@ async def get_product(product_ref: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("")
 async def add_product(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     name: str = Form(...),
     price: str = Form(...),
@@ -57,21 +62,25 @@ async def add_product(
     if price_f <= 0:
         raise HTTPException(status_code=400, detail="Price must be greater than 0.")
 
-    op = float(originalPrice) if originalPrice not in (None, "") else None
+    try:
+        op = float(originalPrice) if originalPrice not in (None, "") else None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid original price")
     if op is not None and price_f > op:
         raise HTTPException(status_code=400, detail="Price must be <= original price.")
 
-    last = await db.execute(select(Product).order_by(Product.id.desc()).limit(1))
-    last_p = last.scalar_one_or_none()
-    product_id = str(int(last_p.product_id) + 1) if last_p else "1"
+    product_id = await _next_product_id(db)
 
     image_url = ""
     if image is not None and getattr(image, "filename", None):
         content = await image.read()
         if len(content) > 0:
             try:
-                image_url = upload_product_image(
-                    content, image.content_type or "application/octet-stream", image.filename or "image"
+                image_url = store_product_image(
+                    content,
+                    image.content_type or "application/octet-stream",
+                    image.filename or "image",
+                    str(request.base_url),
                 )
             except RuntimeError as e:
                 raise HTTPException(status_code=500, detail=str(e)) from e

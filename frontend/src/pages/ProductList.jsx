@@ -58,21 +58,37 @@ const Home = () => {
   );
 
   const productsToDisplay = sortedProducts.slice(0, productsToShow);
+  const hasActiveFilters = Boolean(
+    filters.keyword ||
+      filters.sale ||
+      filters.freeShipping ||
+      filters.category ||
+      filters.minPrice ||
+      filters.maxPrice ||
+      filters.make ||
+      filters.city
+  );
+  const emptyMessage =
+    products.length === 0
+      ? "No products have been added yet."
+      : hasActiveFilters
+        ? "No products match the current filters."
+        : "No products are available right now.";
 
   const handleSeeMore = () => setProductsToShow((prev) => prev + 6);
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p>Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#050505]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-red-500">
-        <p>{error}</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#050505] text-red-500">
+        <p className="bg-red-500/10 p-6 rounded-xl border border-red-500/20">{error}</p>
       </div>
     );
   }
@@ -80,47 +96,63 @@ const Home = () => {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-black">
-        <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-semibold text-gray-100">Browse Parts</h1>
-          <p className="mt-2 text-sm text-gray-400">
-            Explore live inventory from the backend and narrow it down by make, city, category, and price.
-          </p>
+      <div className="min-h-screen bg-[#050505] selection:bg-red-500/30">
+        {/* Premium Header */}
+        <div className="relative border-b border-white/5 bg-black">
+          <div className="absolute inset-0 bg-gradient-to-r from-red-900/20 via-black to-black" />
+          <div className="relative mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+            <h1 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-500 sm:text-5xl">
+              Performance Parts Catalog
+            </h1>
+            <p className="mt-4 max-w-2xl text-lg text-gray-400">
+              Explore our premium inventory of high-performance components. Filter by make, category, and city to find exactly what your build needs.
+            </p>
+          </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <div className="lg:min-w-0">
-            <AdvancedSearch
-              filters={filters}
-              setFilters={setFilters}
-              products={products}
-            />
-          </div>
-
-          <div className="min-w-0">
-            <SortingOptions
-              sortBy={sortBy}
-              setSortBy={setSortBy}
-              setViewMode={setViewMode}
-              viewMode={viewMode}
-            />
-            <div className="mb-4 text-sm text-gray-400">
-              Showing {productsToDisplay.length} of {sortedProducts.length} matching products
+        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+          <div className="grid gap-10 lg:grid-cols-[320px_minmax(0,1fr)] items-start">
+            {/* Sidebar Filters */}
+            <div className="lg:min-w-0 sticky top-24 z-10">
+              <AdvancedSearch
+                filters={filters}
+                setFilters={setFilters}
+                products={products}
+              />
             </div>
-            <ProductGrid products={productsToDisplay} viewMode={viewMode} />
-            {productsToDisplay.length < sortedProducts.length && (
-              <div className="mt-6 text-right">
-                <button
-                  onClick={handleSeeMore}
-                  className="rounded bg-red-500 px-4 py-2 text-white transition-all hover:bg-red-700"
-                >
-                  See More
-                </button>
+
+            {/* Main Product Area */}
+            <div className="min-w-0">
+              <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                  Showing <span className="text-white font-bold">{productsToDisplay.length}</span> of <span className="text-white font-bold">{sortedProducts.length}</span> parts
+                </div>
+                <SortingOptions
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                  setViewMode={setViewMode}
+                  viewMode={viewMode}
+                />
               </div>
-            )}
+
+              <ProductGrid
+                products={productsToDisplay}
+                viewMode={viewMode}
+                emptyMessage={emptyMessage}
+              />
+              
+              {productsToDisplay.length < sortedProducts.length && (
+                <div className="mt-12 text-center">
+                  <button
+                    onClick={handleSeeMore}
+                    className="rounded-xl border border-white/10 bg-white/5 px-8 py-4 font-semibold text-white transition-all hover:bg-white/10 hover:border-white/20 active:scale-95"
+                  >
+                    Load More Parts
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
         </div>
       </div>
       <Footer />

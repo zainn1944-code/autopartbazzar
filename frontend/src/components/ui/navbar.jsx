@@ -12,7 +12,7 @@ const navigation = [
   { name: "Products", href: "/productlist" },
   { name: "Contact Us", href: "/contact" },
   { name: "About", href: "/about" },
-  { name: "Build Car", href: "/viewmodel" },
+  { name: "3D Garage", href: "/viewmodel" },
 ];
 
 function classNames(...classes) {

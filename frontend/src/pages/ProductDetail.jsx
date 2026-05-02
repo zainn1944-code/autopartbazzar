@@ -21,7 +21,7 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const descriptionText =
     product?.description ||
-    `${product?.category || "Auto part"}${product?.make ? ` for ${product.make}` : ""}.`;
+    `${product?.category || "Auto part"}${product?.make ? ` for ${product.make}` : ""}. Built for performance and reliability.`;
 
   useEffect(() => {
     if (!id) return;
@@ -73,6 +73,10 @@ const ProductDetail = () => {
         quantity,
       });
     }
+  };
+
+  const handleBuyNow = () => {
+    handleAddToCart();
     navigate("/cart");
   };
 
@@ -100,119 +104,224 @@ const ProductDetail = () => {
     }
   };
 
-  const renderStars = (rating) => {
+  const renderStars = (rating, interactive = false) => {
     const fullStars = Math.floor(rating);
     const emptyStars = 5 - fullStars;
     return (
-      <div className="flex">
-        {[...Array(fullStars)].map((_, i) => (
-          <span key={i} className="text-yellow-500">&#9733;</span>
-        ))}
-        {[...Array(emptyStars)].map((_, i) => (
-          <span key={i} className="text-gray-500">&#9734;</span>
+      <div className="flex space-x-1">
+        {[...Array(5)].map((_, i) => (
+          <svg
+            key={i}
+            className={`w-5 h-5 transition-colors ${
+              interactive ? "cursor-pointer hover:scale-110" : ""
+            } ${i < rating ? "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" : "text-gray-600"}`}
+            fill="currentColor"
+            viewBox="0 0 20 20"
+            onClick={() => interactive && setNewReview({ ...newReview, rating: i + 1 })}
+          >
+            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+          </svg>
         ))}
       </div>
     );
   };
 
-  if (loading) return <p>Loading...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
-  if (!product) return <p className="text-gray-500">No product found.</p>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white">
+        <Navbar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="bg-red-500/10 border border-red-500/20 p-8 rounded-2xl backdrop-blur-xl">
+            <h2 className="text-2xl font-bold text-red-400 mb-2">Oops!</h2>
+            <p className="text-gray-300">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!product) return null;
 
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-black">
-        <div className="mx-auto w-full max-w-7xl p-4">
-          <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-5">
-            <div className="min-h-[500px] w-full rounded-lg bg-[#0a0a0a] p-6 text-center lg:col-span-3">
-              <ProductVisual
-                name={product.name}
-                make={product.make}
-                category={product.category}
-                imageUrl={selectedImage || product.imageUrl}
-                className="relative mx-auto h-[400px] w-full overflow-hidden rounded-xl"
-                imageClassName="h-full w-full rounded-xl bg-black/20 object-contain p-6"
-              />
+      <div className="min-h-screen bg-[#050505] text-white selection:bg-red-500/30">
+        <div className="mx-auto w-full max-w-7xl px-4 py-12 lg:py-20">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16 items-center">
+            {/* Visuals Left Pane */}
+            <div className="relative group">
+              <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-red-600/20 to-transparent blur-2xl transition-all duration-500 group-hover:blur-3xl opacity-50" />
+              <div className="relative aspect-square w-full overflow-hidden rounded-3xl border border-white/5 bg-black/40 backdrop-blur-sm shadow-2xl">
+                <ProductVisual
+                  name={product.name}
+                  make={product.make}
+                  category={product.category}
+                  imageUrl={selectedImage || product.imageUrl}
+                  className="relative h-full w-full"
+                  imageClassName="h-full w-full object-contain p-8 mix-blend-screen transition-transform duration-700 hover:scale-105"
+                />
+              </div>
             </div>
 
-            <div className="lg:col-span-2 text-gray-100">
-              <h2 className="text-3xl font-bold">{product.name}</h2>
-              <p className="text-xl font-bold text-red-500">Rs {product.price}</p>
-              <div className="mt-4 flex space-x-2">{renderStars(averageRating)}</div>
-              <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-wide text-gray-400">
-                {product.make && <span>{product.make}</span>}
-                {product.category && <span>{product.category}</span>}
-                {product.city && <span>{product.city}</span>}
-              </div>
-              <p className="mt-2 text-gray-300">{descriptionText}</p>
-
-              <div className="mt-4 flex items-center space-x-4">
-                <button
-                  onClick={decreaseQuantity}
-                  className="rounded bg-gray-700 px-4 py-2 text-white"
-                >
-                  -
-                </button>
-                <span className="text-xl">{quantity}</span>
-                <button
-                  onClick={increaseQuantity}
-                  className="rounded bg-gray-700 px-4 py-2 text-white"
-                >
-                  +
-                </button>
+            {/* Product Info Right Pane */}
+            <div className="flex flex-col">
+              <div className="mb-4 flex flex-wrap gap-2">
+                {product.make && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-gray-300 backdrop-blur-md">
+                    {product.make}
+                  </span>
+                )}
+                {product.category && (
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-gray-300 backdrop-blur-md">
+                    {product.category}
+                  </span>
+                )}
+                {product.city && (
+                  <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-red-400 backdrop-blur-md">
+                    {product.city}
+                  </span>
+                )}
               </div>
 
-              <button
-                onClick={handleAddToCart}
-                className="mt-4 w-full rounded-md bg-red-500 px-6 py-3 text-white hover:bg-red-600"
-              >
-                Add to Cart
-              </button>
-            </div>
-          </div>
+              <h1 className="text-4xl lg:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400 mb-4">
+                {product.name}
+              </h1>
 
-          <div className="mt-12 rounded-lg bg-gray-900 p-6">
-            <h3 className="text-xl font-bold text-gray-100">Customer Reviews</h3>
-            <div className="mt-4 space-y-6">
-              {productReviews.length === 0 && (
-                <p className="text-gray-400">No reviews yet. Be the first to review this product.</p>
-              )}
-              {productReviews.map((review, i) => (
-                <div key={i} className="text-gray-300">
-                  {renderStars(review.rating)}
-                  <p className="font-semibold text-gray-100">Customer</p>
-                  <p>{review.text}</p>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex items-center gap-2">
+                  {renderStars(averageRating)}
+                  <span className="text-sm font-medium text-gray-400">
+                    ({productReviews.length} reviews)
+                  </span>
                 </div>
-              ))}
+              </div>
+
+              <div className="mb-8 flex items-end gap-3">
+                <span className="text-4xl font-bold text-white">Rs {product.price}</span>
+                {product.originalPrice > 0 && (
+                  <span className="text-xl text-gray-500 line-through mb-1">
+                    Rs {product.originalPrice}
+                  </span>
+                )}
+              </div>
+
+              <p className="text-lg leading-relaxed text-gray-400 mb-10 border-l-2 border-white/10 pl-4">
+                {descriptionText}
+              </p>
+
+              {/* Purchase Controls */}
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
+                <div className="flex items-center gap-6 mb-6">
+                  <span className="text-sm font-semibold text-gray-300 uppercase tracking-widest">Quantity</span>
+                  <div className="flex items-center bg-black/50 rounded-xl border border-white/10 overflow-hidden">
+                    <button
+                      onClick={decreaseQuantity}
+                      className="px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                      </svg>
+                    </button>
+                    <span className="w-12 text-center font-semibold text-lg">{quantity}</span>
+                    <button
+                      onClick={increaseQuantity}
+                      className="px-4 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={handleAddToCart}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-4 font-semibold text-white transition-all hover:bg-white/10 hover:border-white/20 active:scale-[0.98]"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                    </svg>
+                    Add to Cart
+                  </button>
+                  <button
+                    onClick={handleBuyNow}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-red-500 px-6 py-4 font-bold text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] transition-all hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    Buy Now
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="mt-12 rounded-lg bg-gray-900 p-6">
-            <h3 className="text-xl font-bold text-gray-100">Submit Your Review</h3>
-            <textarea
-              className="mt-4 w-full rounded-md bg-gray-100 p-3 text-gray-900"
-              placeholder="Write your review..."
-              value={newReview.text}
-              onChange={(e) => setNewReview({ ...newReview, text: e.target.value })}
-            />
-            <div className="mt-4 flex space-x-2">
-              {[...Array(5)].map((_, i) => (
-                <span
-                  key={i}
-                  className={`cursor-pointer ${newReview.rating > i ? "text-yellow-500" : "text-gray-500"}`}
-                  onClick={() => setNewReview({ ...newReview, rating: i + 1 })}
-                >
-                  &#9733;
-                </span>
-              ))}
+          <div className="mt-24 grid grid-cols-1 lg:grid-cols-3 gap-12 border-t border-white/10 pt-16">
+            <div className="lg:col-span-2 space-y-8">
+              <h3 className="text-2xl font-bold text-white mb-6">Customer Reviews</h3>
+              {productReviews.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-800 bg-white/5 p-8 text-center text-gray-400">
+                  No reviews yet. Be the first to share your experience!
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {productReviews.map((review, i) => (
+                    <div key={i} className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center font-bold">
+                            C
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-200">Customer</p>
+                            <p className="text-xs text-gray-500">Verified Buyer</p>
+                          </div>
+                        </div>
+                        {renderStars(review.rating)}
+                      </div>
+                      <p className="text-gray-300 leading-relaxed">{review.text}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <button
-              onClick={handleReviewSubmit}
-              className="mt-4 w-full rounded-md bg-red-500 px-6 py-3 text-white hover:bg-red-600"
-            >
-              Submit Review
-            </button>
+
+            <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent p-8 h-fit sticky top-24">
+              <h3 className="text-xl font-bold text-white mb-6">Write a Review</h3>
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Rating</label>
+                  {renderStars(newReview.rating, true)}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-400 mb-2">Your Experience</label>
+                  <textarea
+                    className="w-full rounded-xl border border-white/10 bg-black/50 p-4 text-white placeholder-gray-600 focus:border-red-500 focus:ring-1 focus:ring-red-500 transition-all outline-none resize-none"
+                    placeholder="What did you like about this part?"
+                    rows="4"
+                    value={newReview.text}
+                    onChange={(e) => setNewReview({ ...newReview, text: e.target.value })}
+                  />
+                </div>
+                <button
+                  onClick={handleReviewSubmit}
+                  disabled={!newReview.text || newReview.rating < 1}
+                  className="w-full rounded-xl bg-white text-black font-bold py-3 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Post Review
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

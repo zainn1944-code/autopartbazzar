@@ -116,7 +116,7 @@ export default function EnterEmail() {
         setError(data.error || "Failed to verify email.");
       }
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      setError(err.response?.data?.detail || "An error occurred. Please try again.");
     } finally {
       setLoading(false); // Stop loading
     }
@@ -131,6 +131,9 @@ export default function EnterEmail() {
           <h1 className="text-3xl font-semibold text-center md:text-left">Enter Your Email</h1>
           <p className="text-xs text-center text-slate-400 md:text-left">
             Enter your email to verify and reset your password.
+          </p>
+          <p className="text-xs text-center text-slate-500 md:text-left">
+            Local password reset emails require `EMAIL_USER` and `EMAIL_PASS` in `backend/.env`.
           </p>
           <form onSubmit={handleVerifyEmail} className="mt-4 w-full max-w-md">
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">

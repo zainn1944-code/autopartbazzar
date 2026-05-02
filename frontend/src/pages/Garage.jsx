@@ -1,18 +1,118 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as THREE from "three";
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import Navbar from '@/components/ui/navbar';
-import Footer from '@/components/ui/footer';
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls, Environment, ContactShadows, PresentationControls, Bounds } from "@react-three/drei";
+import Navbar from "@/components/ui/navbar";
+import Footer from "@/components/ui/footer";
+import {
+  PAINT_SWATCHES,
+  DEFAULT_BODY_PAINT,
+  applyBodyPaint,
+  removeAttachedParts,
+  getCustomizationProfile,
+  enhanceTailLightEmissive,
+} from "@/lib/carCustomization.js";
+
+// Inner component to handle the loading and rendering of the car model
+function CarScene({ modelUrl, carMake, onModelLoaded, setLoadError }) {
+  const [localCar, setLocalCar] = useState(null);
+
+  useEffect(() => {
+    if (!modelUrl) return;
+    const loader = new GLTFLoader();
+    loader.load(
+      decodeURIComponent(modelUrl),
+      (gltf) => {
+        const loadedCar = gltf.scene;
+        applyBodyPaint(loadedCar, DEFAULT_BODY_PAINT);
+
+        // Apply manual scale from profile instead of brittle auto-scaling
+        const profile = getCustomizationProfile(carMake, modelUrl);
+        if (profile.modelScale) {
+          loadedCar.scale.set(profile.modelScale[0], profile.modelScale[1], profile.modelScale[2]);
+        }
+
+        // Recompute bounds after scaling to center the car
+        loadedCar.updateMatrixWorld(true);
+        const scaledBox = new THREE.Box3();
+        loadedCar.traverse((child) => {
+          if (child.isMesh) scaledBox.expandByObject(child);
+        });
+        const center = scaledBox.getCenter(new THREE.Vector3());
+        
+        // Center the original car mesh inside a wrapper
+        loadedCar.position.set(-center.x, -scaledBox.min.y, -center.z);
+
+        // Turn on shadows for the car
+        loadedCar.traverse((child) => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
+
+        // We use a wrapper group so custom parts added later don't inherit the weird scale of the original GLB!
+        const carWrapper = new THREE.Group();
+        carWrapper.add(loadedCar);
+
+        setLocalCar(carWrapper);
+        if (onModelLoaded) onModelLoaded(carWrapper);
+      },
+      undefined,
+      (error) => {
+        setLoadError(`Model could not be loaded: ${decodeURIComponent(modelUrl)}`);
+        console.error("Error loading model:", error);
+      }
+    );
+  }, [modelUrl, onModelLoaded, setLoadError]);
+
+  if (!localCar) return null;
+
+  return (
+    <>
+      <Bounds fit clip observe margin={1.2}>
+        <primitive object={localCar} />
+      </Bounds>
+      
+      {/* Photorealistic Lighting & Environment */}
+      <Environment preset="city" />
+      <directionalLight 
+        position={[10, 10, 5]} 
+        intensity={1.5} 
+        castShadow 
+        shadow-mapSize-width={2048} 
+        shadow-mapSize-height={2048}
+        shadow-camera-far={50}
+        shadow-camera-left={-10}
+        shadow-camera-right={10}
+        shadow-camera-top={10}
+        shadow-camera-bottom={-10}
+      />
+      
+      {/* Realistic ground shadow */}
+      <ContactShadows resolution={1024} scale={10} blur={2} opacity={0.5} far={10} color="#000000" />
+      
+      {/* Smooth orbiting controls */}
+      <OrbitControls 
+        makeDefault 
+        minPolarAngle={0} 
+        maxPolarAngle={Math.PI / 2 + 0.1} 
+        enablePan={false} 
+        minDistance={2} 
+        maxDistance={15} 
+        dampingFactor={0.05}
+      />
+    </>
+  );
+}
 
 export default function Garage() {
   const [selectedParts, setSelectedParts] = useState({});
-  const [totalPrice, setTotalPrice] = useState(0);
   const [dropdowns, setDropdowns] = useState({});
-  const [selectedBumperType, setSelectedBumperType] = useState(null);
   const [carModel, setCarModel] = useState(null);
-  const [selectedColorName, setSelectedColorName] = useState('');
+  const [selectedColorName, setSelectedColorName] = useState("");
   const [loadError, setLoadError] = useState("");
 
   const [searchParams] = useSearchParams();
@@ -21,372 +121,233 @@ export default function Garage() {
   const carName = searchParams.get("name") || "";
   const displayTitle = [carMake, carName].filter(Boolean).join(" ") || "Custom Build";
 
+  const engineAudioRef = useRef(null);
+  const revAudioRef = useRef(null);
+
+  const customizationProfile = useMemo(
+    () => getCustomizationProfile(carMake, modelUrl),
+    [carMake, modelUrl]
+  );
+
   const makeKey = carMake.toLowerCase();
-  const engineAudioSrc = makeKey === "bmw" ? "/bmwstart.mp3" : "/civicstart.mp3";
-  const revAudioSrc = makeKey === "bmw" ? "/bmwrev.mp3" : "/civicrev.mp3";
+  // Replace Toyota/Lamborghini fallbacks once dedicated clips are added under /public/audio.
+  const AUDIO_MAP = {
+    bmw:         { engine: '/audio/bmwstart.mp3',      rev: '/audio/bmwrev.mp3'      },
+    toyota:      { engine: '/audio/civicstart.mp3',    rev: '/audio/civicrev.mp3'    },
+    lamborghini: { engine: '/audio/bmwstart.mp3',      rev: '/audio/bmwrev.mp3'      },
+    honda:       { engine: '/audio/civicstart.mp3',    rev: '/audio/civicrev.mp3'    },
+  };
+  const audioSrcs = AUDIO_MAP[makeKey] ?? AUDIO_MAP.honda;
+  const engineAudioSrc = audioSrcs.engine;
+  const revAudioSrc = audioSrcs.rev;
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      function createGradientCanvas() {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 256;
-        canvas.height = 256;
-      
-        // Grayscale gradient — dark but with contrast and depth
-        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        gradient.addColorStop(0, '#e5e5e5');  // Light Gray (near white)
-        gradient.addColorStop(0.4, '#4b5563'); // Medium-dark Gray (Tailwind Gray-600)
-        gradient.addColorStop(1, '#111827');  // Very dark gray (Tailwind Gray-900)
-      
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-        return canvas;
-      } 
-
-    if (!modelUrl) {
-            console.error("❌ No model URL found in the query params.");
-             return;
-           }
-           setLoadError("");
-           console.log("✅ Model URL:", modelUrl);
-      let car;
-      const scene = new THREE.Scene();
-      const gradientTexture = new THREE.CanvasTexture(createGradientCanvas());
-      scene.background = gradientTexture;
-
-
-      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
-      camera.position.set(0, 2, 6);
-
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      const container = document.getElementById('garage');
-      if (container) {
-        while (container.firstChild) container.removeChild(container.firstChild);
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        renderer.shadowMap.enabled = true;
-        container.appendChild(renderer.domElement);
-      }
-
-      // Brighter ambient light
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-scene.add(ambientLight);
-
-// White spotlight from above
-const spotLight = new THREE.SpotLight(0xffffff, 2, 50, Math.PI / 6, 0.2, 1.5);
-spotLight.position.set(5, 10, 5);
-spotLight.castShadow = true;
-scene.add(spotLight);
-
-// Stronger back light
-const backLight = new THREE.DirectionalLight(0xffffff, 0.8);
-backLight.position.set(-5, 5, -5);
-scene.add(backLight);
-
-const loader = new GLTFLoader();
-    loader.load(
-      decodeURIComponent(modelUrl), 
-        (gltf) => {
-          car = gltf.scene;
-          
-          // Apply a slight color tint to only the car body, preserving textures
-          car.traverse((child) => {
-            if (child.isMesh && child.name.toLowerCase().includes('body')) { 
-              // Create a new material based on the existing one
-              const originalMaterial = child.material;
-              child.material = new THREE.MeshStandardMaterial({
-                map: originalMaterial.map, // Keep original texture
-                roughness: originalMaterial.roughness,
-                metalness: originalMaterial.metalness,
-                color: new THREE.Color('#ffffff').lerp(new THREE.Color('#FF0000'), 0)
-              });
-            }
-          });
-
-          const box = new THREE.Box3().setFromObject(car);
-          const size = box.getSize(new THREE.Vector3());
-          const center = box.getCenter(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z) || 1;
-          const fov = THREE.MathUtils.degToRad(camera.fov);
-          const cameraDistance = (maxDim / (2 * Math.tan(fov / 2))) * 1.6;
-
-          car.position.set(-center.x, -box.min.y, -center.z);
-
-          camera.near = Math.max(0.1, cameraDistance / 100);
-          camera.far = cameraDistance * 20;
-          camera.position.set(maxDim * 0.2, size.y * 0.7, cameraDistance);
-          camera.lookAt(0, size.y * 0.35, 0);
-      
-          scene.add(car);
-          setCarModel(car);
-          controls.target.set(0, size.y * 0.35, 0);
-          controls.update();
-        },
-        undefined,
-        (error) => {
-          setLoadError(`Model could not be loaded: ${decodeURIComponent(modelUrl)}`);
-          console.error('Error loading model:', error);
-        }
-      );      
-
-      const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.1;
-controls.rotateSpeed = 0.8;
-controls.enableZoom = false;  // Disable zoom
-controls.maxPolarAngle = (1.5 * Math.PI) / 4; // Restrict upward view
-controls.maxPolarAngle = Math.PI / 2; // Restrict downward view
-
-      let rafId;
-      function animate() {
-        rafId = requestAnimationFrame(animate);
-        controls.update();
-        renderer.render(scene, camera);
-      }
-      animate();
-
-      return () => {
-        cancelAnimationFrame(rafId);
-        controls.dispose();
-        renderer.dispose();
-        if (container && renderer.domElement.parentNode === container) {
-          container.removeChild(renderer.domElement);
-        }
-      };
+    if (modelUrl) {
+      setLoadError("");
+      setSelectedColorName(PAINT_SWATCHES[DEFAULT_BODY_PAINT] ?? "Custom");
     }
   }, [modelUrl]);
 
   const loadTires = (tireModelPath) => {
     if (!carModel || !tireModelPath) return;
 
+    const tp = customizationProfile.tires;
+    const useAlt = tireModelPath.includes("tire1.glb");
+    const scaleArr = useAlt ? tp.altScale : tp.defaultScale;
+    const wheelPositions = useAlt ? tp.altPositions : tp.defaultPositions;
+    const rotArr = useAlt ? tp.altRotation : tp.defaultRotation;
+
     const loader = new GLTFLoader();
     loader.load(tireModelPath, (gltf) => {
-        const tireModel = gltf.scene;
+      const tireModel = gltf.scene;
+      tireModel.scale.set(scaleArr[0], scaleArr[1], scaleArr[2]);
 
-        // Default scale and positions for generic tires
-        let scale = { x: 0.31, y: 0.31, z: 0.31 };
-        let wheelPositions = [
-            { x: 0.35, y: 0.142, z: 0.57 },  // Front Right
-            { x: 0.35, y: 0.142, z: -0.55 }, // Rear Right
-        ];
-        let customRotation = { x: 0, y: Math.PI / 2, z: 0 }; // Default rotation (Y-axis)
+      removeAttachedParts(carModel, (name) => name.includes("tire") || name.includes("wheel") || name.includes("rim"));
 
-        // Adjust for tire1.glb
-        if (tireModelPath.includes("tire1.glb")) {
-            scale = { x: 0.23, y: 0.23, z: 0.23 }; // Slightly larger tires
-            wheelPositions = [
-                { x: 0.36, y: 0.15, z: 0.58 },  // Adjusted Front Right
-                { x: 0.36, y: 0.15, z: -0.56 }, // Adjusted Rear Right
-            ];
-            customRotation = { x: 0, y: Math.PI, z: 0 }; // Rotate **90° on Y-axis**
-        }
-
-        // Apply scale
-        tireModel.scale.set(scale.x, scale.y, scale.z);
-
-        // Remove old tires
-        carModel.children = carModel.children.filter(child => !child.name.includes("tire"));
-
-        // Clone and position tires
-        wheelPositions.forEach((pos, index) => {
-            const tireClone = tireModel.clone();
-            tireClone.position.set(pos.x, pos.y, pos.z);
-            tireClone.rotation.set(customRotation.x, customRotation.y, customRotation.z); // Apply Y-axis rotation
-            tireClone.name = `tire_${index}`;
-            carModel.add(tireClone);
-        });
+      wheelPositions.forEach((pos, index) => {
+        const tireClone = tireModel.clone(true);
+        tireClone.position.set(pos.x, pos.y, pos.z);
+        tireClone.rotation.set(rotArr[0], rotArr[1], rotArr[2]);
+        tireClone.name = `tire_${index}`;
+        carModel.add(tireClone);
+      });
     });
-};
-
+  };
 
   const loadBumper = (bumperModelPath) => {
-    if (!carModel) return;
+    if (!carModel || !bumperModelPath) return;
 
+    const bp = customizationProfile.bumper;
     const loader = new GLTFLoader();
     loader.load(bumperModelPath, (gltf) => {
-        const bumperModel = gltf.scene;
-        
-        bumperModel.scale.set(0.69, 0.69, 0.69); // Maintain scaling
+      const bumperModel = gltf.scene;
+      bumperModel.scale.set(bp.scale[0], bp.scale[1], bp.scale[2]);
+      bumperModel.position.set(bp.position[0], bp.position[1], bp.position[2]);
+      bumperModel.rotation.set(bp.rotation[0], bp.rotation[1], bp.rotation[2]);
 
-        bumperModel.position.set(0, 0.172, 0.82); // Adjust positioning
-        
-        bumperModel.rotation.set(0, -Math.PI / 2, 0); // Rotate -90 degrees to align with the car correctly
-        
-        
-        
-        
-        // Remove old bumper if already added
-        const oldBumper = carModel.getObjectByName("bumper");
-        if (oldBumper) {
-            carModel.remove(oldBumper);
-        }
+      const oldBumper = carModel.getObjectByName("bumper");
+      if (oldBumper) carModel.remove(oldBumper);
 
-        // Set name and attach to car model
-        bumperModel.name = "bumper";
-        carModel.add(bumperModel);
+      bumperModel.name = "bumper";
+      carModel.add(bumperModel);
     });
-};
+  };
 
-const loadXenonLights = (modelPath) => {
-  if (!carModel || !modelPath) return;
+  const loadXenonLights = (modelPath) => {
+    if (!carModel || !modelPath) return;
 
-  const loader = new GLTFLoader();
-  loader.load(modelPath, (gltf) => {
+    const preset =
+      modelPath.includes("civiclight.glb") ? customizationProfile.xenon.civiclight : customizationProfile.xenon.default;
+
+    const loader = new GLTFLoader();
+    loader.load(modelPath, (gltf) => {
       const rightLight = gltf.scene;
-
-      // Set default values for Xenon Lights
-      let scale = { x: 0.25, y: 0.2, z: 0.27 };
-      let rightPosition = { x: 0.27, y: 0.285, z: 0.82 };
-      let rightRotation = { x: 0.1, y: Math.PI / 1.4, z: 0.05 };
-
-      // Check if it's the Civic Light model and adjust values
-      if (modelPath.includes("civiclight.glb")) {
-          scale = { x: 0.31, y: 0.25, z: 0.27 };
-          rightPosition = { x: 0.265, y: 0.282, z: 0.78 }; 
-          rightRotation = { x: 0.15, y: Math.PI / 1.4, z: 0.05 };
-      }
-
-      // Apply transformations
-      rightLight.scale.set(scale.x, scale.y, scale.z);
-      rightLight.position.set(rightPosition.x, rightPosition.y, rightPosition.z);
-      rightLight.rotation.set(rightRotation.x, rightRotation.y, rightRotation.z);
-
+      rightLight.scale.set(preset.scale[0], preset.scale[1], preset.scale[2]);
+      rightLight.position.set(preset.pos[0], preset.pos[1], preset.pos[2]);
+      rightLight.rotation.set(preset.rot[0], preset.rot[1], preset.rot[2]);
       rightLight.name = "xenon_light_right";
 
-      // Mirror for left light
-      const leftLight = rightLight.clone();
-      leftLight.position.set(-rightPosition.x, rightPosition.y, rightPosition.z);
-      leftLight.rotation.set(rightRotation.x, -rightRotation.y, rightRotation.z);
-
+      const leftLight = rightLight.clone(true);
+      leftLight.position.set(-preset.pos[0], preset.pos[1], preset.pos[2]);
+      leftLight.rotation.set(preset.rot[0], -preset.rot[1], preset.rot[2]);
       leftLight.name = "xenon_light_left";
 
-      // Remove old lights before adding new ones
-      carModel.children = carModel.children.filter(child => 
-          child.name !== "xenon_light_right" && child.name !== "xenon_light_left"
+      removeAttachedParts(
+        carModel,
+        (name) => name === "xenon_light_right" || name === "xenon_light_left"
       );
 
       carModel.add(rightLight);
       carModel.add(leftLight);
-  });
-};
-
-
-  const colorNames = {
-    '#FF0000': 'Rallye Red',
-    '#003E7E': 'Aegean Blue Metallic',
-    '#C5C5C5': 'Sonic Gray Pearl',
-    '#6C6F70': 'Urban Gray Pearl',
-    '#F6F6F6': 'Platinum White Pearl',
-    '#BCC5D3': 'Meteorite Gray Metallic',
-    '#5A5A5F': 'Canyon River Blue Metallic'
+    });
   };
 
-  const colors = Object.keys(colorNames);
+  const loadBackLights = (modelPath) => {
+    if (!carModel || !modelPath) return;
+
+    const cfg = customizationProfile.backlight;
+    const loader = new GLTFLoader();
+    loader.load(modelPath, (gltf) => {
+      removeAttachedParts(carModel, (name) => name.includes("back_light"));
+
+      const rightLight = gltf.scene.clone(true);
+      rightLight.scale.set(cfg.scale[0], cfg.scale[1], cfg.scale[2]);
+      rightLight.position.set(cfg.rightPos[0], cfg.rightPos[1], cfg.rightPos[2]);
+      rightLight.rotation.set(cfg.rotation[0], cfg.rotation[1], cfg.rotation[2]);
+      rightLight.name = "back_light_right";
+      enhanceTailLightEmissive(rightLight);
+
+      const leftLight = gltf.scene.clone(true);
+      leftLight.scale.set(cfg.scale[0], cfg.scale[1], cfg.scale[2]);
+      leftLight.position.set(cfg.leftPos[0], cfg.leftPos[1], cfg.leftPos[2]);
+      leftLight.rotation.set(cfg.rotation[0], cfg.rotation[1], cfg.rotation[2]);
+      leftLight.name = "back_light_left";
+      enhanceTailLightEmissive(leftLight);
+
+      carModel.add(rightLight);
+      carModel.add(leftLight);
+    });
+  };
+
+  const paintColors = Object.keys(PAINT_SWATCHES);
 
   const handleColorSelection = (color) => {
-    setSelectedColorName(colorNames[color]);
-
-    if (carModel) {
-        carModel.traverse((child) => {
-            if (child.isMesh && child.name) { 
-                const bodyParts = [
-                    "hood", "roof", "door", "trunk", "fender", "frontfender", "rearquarterpanel",
-                    "quarterpanel", "pillar", "body",
-                ];
-                const blackParts = [
-                    "grill", "splitter", "diffuser", "spoiler", "mirror", "vent"
-                ];
-
-                const partName = child.name.toLowerCase();
-                const isBodyPart = bodyParts.some(part => partName.includes(part));
-                const isBlackPart = blackParts.some(part => partName.includes(part));
-
-                if (isBodyPart) {
-                    child.material.color.set(new THREE.Color(color)); // Apply selected color
-                } else if (isBlackPart) {
-                    child.material.color.set(new THREE.Color(0x000000)); // Keep black parts black
-                }
-            }
-        });
-    }
-};
-
-  
-  const parts = {
-    tyres: [
-      { name: 'Sport Tyres', price: 1200, img: '/Images/truck.png', model: '/models/tire.glb' },
-      { name: 'Alloy rims', price: 1400, img: '/Images/car1.jpg', model: '/models/tire1.glb' },
-    ],
-    frontBumpers: [
-      { name: 'Front Bumper', price: 1500, img: '/Images/car1.jpg', model: '/models/civicfbumper.glb' },
-      { name: 'Front Bumper V2', price: 1700, img: '/Images/car2.jpg', model: '/models/civicfbumper1.glb' },
-  ],  
-    rearBumpers: [
-      { name: 'Rear Bumper', price: 1300, img: '/Images/car1.jpg' },
-      { name: 'Rear Bumper V2', price: 1500, img: '/Images/car2.jpg' },
-      { name: 'Rear Bumper V3', price: 1700, img: '/Images/updated.jpg' }
-    ],
-    frontLights: [
-      { name: 'Xenon Lights', price: 1350, img: '/Images/latest.jpg', model: '/models/civicrightlight.glb' },
-      { name: 'Black Sports Lights', price: 1350, img: '/Images/background.jpg', model: '/models/civiclight.glb' }
-    ],
-    // rearLights: [
-    //   { name: 'Strip Lights', price: 1350, img: '/svgs/light.svg', model: '/models/backlight.glb' },
-    // ]
+    setSelectedColorName(PAINT_SWATCHES[color] ?? "Custom");
+    if (carModel) applyBodyPaint(carModel, color);
   };
-  
+
+  const parts = useMemo(() => {
+    const BASE = '/models';
+    const MAKE = makeKey;
+
+    const SHARED_TYRES = [
+      { name: 'Sport Tyres',  price: 1200, model: `${BASE}/shared/tire.glb`  },
+      { name: 'Alloy Rims',   price: 1400, model: `${BASE}/shared/tire1.glb` },
+    ];
+
+    const BUMPERS = {
+      honda: [
+        { name: 'Front Bumper',    price: 1500, model: `${BASE}/honda/civicfbumper.glb`  },
+        { name: 'Front Bumper V2', price: 1700, model: `${BASE}/honda/civicfbumper1.glb` },
+      ],
+      bmw: [
+        { name: 'M Performance Front', price: 2200, model: `${BASE}/honda/civicfbumper.glb` },
+        { name: 'CSL Front Splitter',  price: 2800, model: `${BASE}/honda/civicfbumper1.glb` },
+      ],
+      toyota: [
+        { name: 'TRD Front Lip',   price: 1600, model: `${BASE}/honda/civicfbumper.glb` },
+      ],
+      lamborghini: [
+        { name: 'Aerodynamica Front', price: 3500, model: `${BASE}/honda/civicfbumper1.glb` },
+      ],
+    };
+
+    const FRONT_LIGHTS = {
+      honda: [
+        { name: 'Xenon Lights',       price: 1350, model: `${BASE}/honda/civicrightlight.glb` },
+        { name: 'Black Sports Lights', price: 1350, model: `${BASE}/honda/civiclight.glb`      },
+      ],
+      bmw:         [{ name: 'Adaptive LED', price: 2100, model: `${BASE}/honda/civiclight.glb` }],
+      toyota:      [{ name: 'LED Matrix',   price: 1800, model: `${BASE}/honda/civicrightlight.glb` }],
+      lamborghini: [{ name: 'Xenon Blades', price: 3200, model: `${BASE}/honda/civiclight.glb` }],
+    };
+
+    return {
+      tyres:        SHARED_TYRES,
+      frontBumpers: BUMPERS[MAKE]  ?? BUMPERS.honda,
+      rearBumpers: [
+        { name: 'Rear Bumper',    price: 1300 },
+        { name: 'Rear Bumper V2', price: 1500 },
+      ],
+      frontLights:  FRONT_LIGHTS[MAKE] ?? FRONT_LIGHTS.honda,
+      rearLights: [
+        { name: 'LED Strip Tails', price: 1350, model: `${BASE}/shared/backlight.glb` },
+      ],
+    };
+  }, [makeKey]);
 
   const toggleDropdown = (category) => {
     setDropdowns((prev) => ({ ...prev, [category]: !prev[category] }));
   };
 
-  const handlePartSelection = (category, part, type = null) => {
-    setSelectedParts((prev) => {
-        let updatedParts = { ...prev };
+  const handlePartSelection = (category, part) => {
+    setSelectedParts((prev) => ({ ...prev, [category]: part }));
 
-        if (category === 'bumpers') {
-            updatedParts[`${category}-${type}`] = part;
-        } else {
-            updatedParts[category] = part;
-        }
+    if (category === "tyres" && part.model) loadTires(part.model);
+    if (category === "frontBumpers" && part.model) loadBumper(part.model);
+    if (category === "frontLights" && part.model) loadXenonLights(part.model);
+    if (category === "rearLights" && part.model) loadBackLights(part.model);
+  };
 
-        // Load tires if selected
-        if (category === 'tyres') {
-            loadTires(part.model);
-        }
+  const playAudio = (audioRef, buttonId) => {
+    const audio = audioRef.current;
+    const btn = document.getElementById(buttonId);
+    if (!audio || !btn) return;
 
-        // Load and overlap bumper if selected
-        if (category === 'frontBumpers') {
-            loadBumper(part.model);
-        }
+    if (audio.paused) {
+      audio.play();
+      btn.classList.add("ring-4", "ring-yellow-400", "scale-105");
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
+      btn.classList.remove("ring-4", "ring-yellow-400", "scale-105");
+    }
 
-        // Load Xenon Lights if selected
-        if (category === 'frontLights') {
-            loadXenonLights(part.model);
-        }
-
-        // Load and overlap backlight.glb when Strip Lights are selected
-        if (category === 'rearLights' && part.name === 'Strip Lights') {
-            loadBackLights('/models/backlight.glb');
-        }
-
-        return updatedParts;
-    });
-};
-
-
+    audio.onended = () => {
+      btn.classList.remove("ring-4", "ring-yellow-400", "scale-105");
+    };
+  };
 
   if (!modelUrl) {
     return (
-      <div className="w-full h-screen flex flex-col bg-neutral-900/50 text-white">
+      <div className="w-full h-screen flex flex-col bg-[#121212] text-white font-sans">
         <Navbar />
         <div className="flex flex-grow items-center justify-center p-6">
-          <div className="max-w-md text-center bg-gray-900 border border-gray-700 rounded-lg p-8 shadow-lg">
-            <h2 className="text-2xl font-bold text-red-500 mb-3">No Car Model Selected</h2>
-            <p className="text-gray-300">
-              The garage requires a <span className="font-semibold text-white">modelUrl</span> query parameter.
-              Please pick a vehicle from the search page and try again.
+          <div className="max-w-md text-center bg-white/5 backdrop-blur-lg border border-white/10 rounded-2xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
+            <h2 className="text-3xl font-extrabold text-red-500 mb-4 tracking-tight">No Car Selected</h2>
+            <p className="text-gray-300 leading-relaxed text-lg">
+              The garage requires a <span className="font-semibold text-white">model</span> to configure.
+              Please pick a vehicle from the catalog.
             </p>
           </div>
         </div>
@@ -396,132 +357,140 @@ const loadXenonLights = (modelPath) => {
   }
 
   return (
-    <div className="w-full h-screen flex flex-col bg-neutral-900/50 text-white">
-      <Navbar />
-      <div className="flex flex-grow w-full p-6 gap-6">
-        {/* 3D Car Viewer */}
-        <div className="flex-1 bg-gray-900 shadow-lg rounded-lg p-6 border border-gray-700 flex items-center justify-center">
-          <div className="w-full h-[500px] relative">
-            <div id="garage" className="w-full h-full" />
-            {loadError && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 px-6 text-center">
-                <p className="text-red-400 font-semibold">{loadError}</p>
+    <div className="w-full h-screen flex flex-col bg-[#0a0a0a] text-white font-sans overflow-hidden">
+      <Navbar className="relative z-50 shadow-md" />
+      
+      <div className="relative flex-grow w-full h-full">
+        {/* Fullscreen 3D Canvas */}
+        <div className="absolute inset-0 z-0">
+          <Canvas shadows camera={{ position: [5, 2, 8], fov: 45 }}>
+            <color attach="background" args={["#161618"]} />
+            <CarScene
+              modelUrl={modelUrl}
+              carMake={carMake}
+              onModelLoaded={setCarModel}
+              setLoadError={setLoadError}
+            />
+          </Canvas>
+
+          {loadError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-10">
+              <div className="bg-red-500/20 border border-red-500 rounded-xl p-6 backdrop-blur-sm">
+                <p className="text-red-400 font-semibold text-lg">{loadError}</p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Customization Panel */}
-        <div className="relative w-1/3 bg-gray-900 shadow-lg rounded-lg p-6 border border-gray-700">
-          <h2 className="text-xl font-bold text-white mb-4">{displayTitle}</h2>
-          <h3 className="text-md font-semibold text-red-500">Customization Options</h3>
+        {/* Premium Glassmorphism UI Overlay */}
+        <div className="absolute top-6 right-6 bottom-6 w-80 sm:w-96 bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] p-6 flex flex-col z-10 overflow-y-auto custom-scrollbar">
+          <h2 className="text-2xl font-bold text-white mb-1 tracking-wide">{displayTitle}</h2>
+          <p className="text-xs text-red-500 font-semibold mb-6 uppercase tracking-[0.2em]">Configurator</p>
 
-          {/* Color Options */}
-         {/* Color Options */}
-         <div className="mt-4">
-            <h4 className="text-white font-semibold">Choose Color:</h4>
-            <div className="flex gap-2 mt-2">
-              {colors.map((color) => (
-                <div
+          {/* Color Selection */}
+          <div className="mb-8">
+            <h4 className="text-xs text-gray-400 uppercase tracking-widest mb-3 font-semibold">Exterior Color</h4>
+            <div className="flex flex-wrap gap-3">
+              {paintColors.map((color) => (
+                <button
                   key={color}
-                  className="w-8 h-8 rounded-full border-2 cursor-pointer hover:scale-110 transition-all"
-                  style={{ backgroundColor: color }}
                   onClick={() => handleColorSelection(color)}
+                  className={`w-9 h-9 rounded-full border-[3px] transition-all duration-300 ${
+                    selectedColorName === PAINT_SWATCHES[color] 
+                      ? "border-white scale-110 shadow-[0_0_15px_rgba(255,255,255,0.4)]" 
+                      : "border-transparent hover:scale-110 hover:border-white/50 hover:shadow-[0_0_10px_rgba(255,255,255,0.2)]"
+                  }`}
+                  style={{ backgroundColor: color }}
+                  aria-label={`Select color ${PAINT_SWATCHES[color]}`}
                 />
               ))}
             </div>
-
-            {/* Display Selected Color Name */}
             {selectedColorName && (
-              <p className="mt-2 text-sm text-gray-300 italic">
-                Selected Color: <span className="font-semibold text-white">{selectedColorName}</span>
+              <p className="mt-3 text-sm font-medium text-gray-200">
+                {selectedColorName}
               </p>
             )}
-             </div>
-          {/* Parts Selection */}
-          {Object.keys(parts).map((category) => (
-  <div key={category} className="mt-4">
-    <button
-      className={`w-full p-2 rounded-lg transition-all ${
-        dropdowns[category] ? 'bg-red-700/90' : 'bg-gray-700 hover:bg-red-600/80'
-      }`}
-      onClick={() => toggleDropdown(category)}
-    >
-      {category.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} {/* Converts camelCase to Title Case */}
-    </button>
+          </div>
 
-    {dropdowns[category] && (
-      <div className="mt-2 p-2 bg-gray-800 rounded-lg">
-        {parts[category].map((part) => (
-          <button key={part.name} className="p-2 w-full bg-gray-700 hover:bg-red-600/80" onClick={() => handlePartSelection(category, part)}>
-            {part.name}
-          </button>
-        ))}
-      </div>
-    )}
-  </div>
-))}
-{/* Engine Control Buttons */}
-<div className="absolute bottom-6 right-6 flex flex-row gap-4">
-  {/* Start Engine Button */}
-  <div>
-    <button
-      onClick={() => {
-        const audio = document.getElementById('engine-audio');
-        const btn = document.getElementById('engine-btn');
+          {/* Parts Selection Dropdowns */}
+          <div className="flex-1 space-y-4">
+            <h4 className="text-xs text-gray-400 uppercase tracking-widest mb-2 font-semibold">Modifications</h4>
+            {Object.keys(parts).map((category) => (
+              <div key={category} className="rounded-2xl overflow-hidden bg-white/5 border border-white/10 transition-all">
+                <button
+                  className="w-full px-5 py-4 text-left flex justify-between items-center text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+                  onClick={() => toggleDropdown(category)}
+                >
+                  {category.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase())}
+                  <span className={`transform transition-transform duration-300 ${dropdowns[category] ? "rotate-180" : ""}`}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </span>
+                </button>
+                <div
+                  className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                    dropdowns[category] ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  <div className="p-2 bg-black/30 backdrop-blur-md space-y-1">
+                    {parts[category].map((part) => (
+                      <button
+                        key={part.name}
+                        className={`w-full text-left px-4 py-3 text-sm rounded-xl transition-all duration-200 ${
+                          selectedParts[category]?.name === part.name
+                            ? "bg-red-600 text-white shadow-lg"
+                            : "text-gray-300 hover:text-white hover:bg-white/10"
+                        }`}
+                        onClick={() => handlePartSelection(category, part)}
+                      >
+                        {part.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
 
-        if (audio.paused) {
-          audio.play();
-          btn.classList.add('ring-4', 'ring-yellow-400', 'shadow-xl');
-        } else {
-          audio.pause();
-          audio.currentTime = 0;
-          btn.classList.remove('ring-4', 'ring-yellow-400', 'shadow-xl');
-        }
+          {/* Engine Audio Controls */}
+          <div className="mt-8 space-y-3 pb-4">
+            <h4 className="text-xs text-gray-400 uppercase tracking-widest mb-2 font-semibold">Engine Control</h4>
+            <button
+              id="engine-btn"
+              onClick={() => playAudio(engineAudioRef, "engine-btn")}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-bold tracking-wide shadow-[0_0_20px_rgba(220,38,38,0.3)] transition-all transform hover:-translate-y-0.5"
+            >
+              Start Engine
+            </button>
+            <audio ref={engineAudioRef} src={engineAudioSrc} preload="auto" />
 
-        audio.onended = () => {
-          btn.classList.remove('ring-4', 'ring-yellow-400', 'shadow-xl');
-        };
-      }}
-      id="engine-btn"
-      className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-5 rounded-full transition-all"
-    >
-      Start Engine
-    </button>
-    <audio id="engine-audio" src={engineAudioSrc} preload="auto" />
-  </div>
-
-  {/* Rev Engine Button */}
-  <div>
-    <button
-      onClick={() => {
-        const audio = document.getElementById('rev-audio');
-        const btn = document.getElementById('rev-btn');
-
-        if (audio.paused) {
-          audio.play();
-          btn.classList.add('ring-4', 'ring-yellow-400', 'shadow-xl');
-        } else {
-          audio.pause();
-          audio.currentTime = 0;
-          btn.classList.remove('ring-4', 'ring-yellow-400', 'shadow-xl');
-        }
-
-        audio.onended = () => {
-          btn.classList.remove('ring-4', 'ring-yellow-400', 'shadow-xl');
-        };
-      }}
-      id="rev-btn"
-      className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-5 rounded-full transition-all"
-    >
-      Rev Engine
-    </button>
-    <audio id="rev-audio" src={revAudioSrc} preload="auto" />
-  </div>
-</div>
+            <button
+              id="rev-btn"
+              onClick={() => playAudio(revAudioRef, "rev-btn")}
+              className="w-full py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 text-white font-bold tracking-wide transition-all border border-white/10 transform hover:-translate-y-0.5"
+            >
+              Rev Engine
+            </button>
+            <audio ref={revAudioRef} src={revAudioSrc} preload="auto" />
+          </div>
         </div>
       </div>
-      <Footer />
+      <style dangerouslySetInnerHTML={{__html: `
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.2);
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.4);
+        }
+      `}} />
     </div>
   );
 }

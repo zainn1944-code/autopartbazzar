@@ -52,6 +52,20 @@ This will:
 - install frontend dependencies
 - create `backend/.env` from `backend/.env.example` if missing
 
+Before starting the app, do these required backend steps:
+
+1. Set `DATABASE_URL` in `backend/.env` to a running PostgreSQL database.
+2. Run Alembic migrations:
+
+```powershell
+npm.cmd run migrate:backend
+```
+
+Optional local-dev services:
+
+- Leave `AWS_*` blank to store uploaded product images locally under the backend `media` route.
+- Set `EMAIL_USER` / `EMAIL_PASS` if you want password-reset OTP emails to work.
+
 ## Run the App
 
 Start the backend:
@@ -83,6 +97,14 @@ Copy-Item backend\.env.example backend\.env
 npm.cmd --prefix frontend install
 ```
 
+Apply database migrations after `backend/.env` points at PostgreSQL:
+
+```powershell
+Set-Location backend
+.\autopart_venv\Scripts\python.exe -m alembic upgrade head
+Set-Location ..
+```
+
 Manual run commands:
 
 ```powershell
@@ -111,6 +133,11 @@ Main backend settings include:
 - `email_pass`
 - `cors_origins`
 
+Behavior when optional services are not configured:
+
+- Product image uploads fall back to local storage served from `http://127.0.0.1:8000/media/...`
+- Password reset email endpoints return a clear `503` until SMTP credentials are configured
+
 ## Useful Scripts
 
 Root scripts from `package.json`:
@@ -118,6 +145,7 @@ Root scripts from `package.json`:
 - `npm.cmd run setup`
 - `npm.cmd run install:frontend`
 - `npm.cmd run install:backend`
+- `npm.cmd run migrate:backend`
 - `npm.cmd run dev:frontend`
 - `npm.cmd run dev:backend`
 
@@ -128,6 +156,6 @@ Seed helpers:
 
 ## Notes
 
-- Product images are served locally from `frontend/public/product-images/`
+- The frontend talks directly to `VITE_API_URL` and does not rely on a Vite `/api` proxy.
 - GLB assets are served from `frontend/public/carmodels/` and `frontend/public/models/`
 - If PowerShell blocks `npm`, use `npm.cmd`
