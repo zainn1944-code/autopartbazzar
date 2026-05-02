@@ -1,315 +1,323 @@
-'use client';
-
-import React, { useState } from 'react';
-import '@fortawesome/fontawesome-free/css/all.min.css';
-import { Line } from 'react-chartjs-2';
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import "@fortawesome/fontawesome-free/css/all.min.css";
+import { Line } from "react-chartjs-2";
 import {
-    Chart as ChartJS, LineElement, PointElement, CategoryScale, LinearScale, Title, Tooltip, Legend,
-} from 'chart.js';
+  Chart as ChartJS,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import axiosInstance from "@/api/axiosInstance";
 
 ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Title, Tooltip, Legend);
 
+const chartOptions = {
+  responsive: true,
+  plugins: {
+    legend: {
+      labels: {
+        color: "#e5e7eb",
+      },
+    },
+  },
+  scales: {
+    x: {
+      ticks: {
+        color: "#d1d5db",
+      },
+      grid: {
+        color: "rgba(255,255,255,0.08)",
+      },
+    },
+    y: {
+      beginAtZero: true,
+      ticks: {
+        color: "#d1d5db",
+        precision: 0,
+      },
+      grid: {
+        color: "rgba(255,255,255,0.08)",
+      },
+    },
+  },
+};
+
+const buildChartData = (labels, values, label, borderColor, backgroundColor) => ({
+  labels: labels.length > 0 ? labels : ["No products"],
+  datasets: [
+    {
+      label,
+      data: values.length > 0 ? values : [0],
+      borderColor,
+      backgroundColor,
+      pointBackgroundColor: borderColor,
+      tension: 0.35,
+      fill: true,
+    },
+  ],
+});
+
 export default function AdminDashboard() {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-    const [showMore, setShowMore] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-    // Sample data for the line charts
-    const lineChartData = {
-        labels: ['January', 'February', 'March', 'April', 'May'],
-        datasets: [
-            {
-                label: 'Sales',
-                data: [100, 225, 150, 300, 100],
-                borderColor: 'rgba(0, 0, 0, 1)',
-                backgroundColor: 'rgba(139, 0, 0, 1)',
-                pointBackgroundColor: 'rgba(139, 0, 0, 1)',
-                fill: true,
-            },
-        ],
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const { data } = await axiosInstance.get("/products");
+        setProducts(data.products || []);
+      } catch (requestError) {
+        setError(requestError.response?.data?.detail || "Failed to load inventory.");
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const revenueChartData = {
-        labels: ['January', 'February', 'March', 'April', 'May'],
-        datasets: [
-            {
-                label: 'Revenue',
-                data: [300, 450, 350, 800, 300],
-                borderColor: 'rgba(0, 0, 0, 1)',
-                backgroundColor: 'rgba(139, 0, 0, 1)',
-                pointBackgroundColor: 'rgba(139, 0, 0, 1)',
-                fill: true,
-            },
-        ],
-    };
+    fetchProducts();
+  }, []);
 
-    const chartOptions = {
-        scales: {
-            x: {
-                grid: {
-                    color: 'rgba(0, 0, 0, 1)',
-                },
-            },
-            y: {
-                grid: {
-                    color: 'rgba(0, 0, 0, 1)',
-                },
-            },
-        },
-    };
+  const categoryCounts = {};
+  const cityCounts = {};
+  const uniqueMakes = new Set();
+  let saleCount = 0;
+  let freeShippingCount = 0;
+  let inventoryValue = 0;
 
-    // Sample data for the pending deliveries table
-    const initialData = [
-        { id: 1, firstName: 'Ahmad', lastName: 'Ali', email: 'ahmadd@email.com', city: 'Lahore', zip: '123', status: 'Member' },
-        { id: 2, firstName: 'Abubakar', lastName: 'Mumtaz', email: 'abubakar@email.com', city: 'Lahore', zip: '456', status: 'Member' },
-        { id: 3, firstName: 'Muhammad', lastName: 'Haaris', email: 'Haaris@email.com', city: 'Lahore', zip: '789', status: 'Member' },
-    ];
+  for (const product of products) {
+    const category = product.category || "Uncategorized";
+    const city = product.city || "Unassigned";
 
-    const additionalData = [
-        { id: 4, firstName: 'Ali', lastName: 'Khan', email: 'ali.khan@email.com', city: 'Karachi', zip: '101', status: 'Pending' },
-        { id: 5, firstName: 'Sara', lastName: 'Ahmed', email: 'sara.ahmed@email.com', city: 'Faisalabad', zip: '202', status: 'Pending' },
-        { id: 6, firstName: 'Hassan', lastName: 'Raza', email: 'hassan.raza@email.com', city: 'Multan', zip: '303', status: 'Pending' },
-    ];
+    categoryCounts[category] = (categoryCounts[category] || 0) + 1;
+    cityCounts[city] = (cityCounts[city] || 0) + 1;
 
+    if (product.make) {
+      uniqueMakes.add(product.make);
+    }
+    if (product.sale) {
+      saleCount += 1;
+    }
+    if (product.freeShipping) {
+      freeShippingCount += 1;
+    }
+    inventoryValue += Number(product.price || 0);
+  }
+
+  const categoryLabels = Object.keys(categoryCounts).sort();
+  const cityLabels = Object.keys(cityCounts).sort();
+  const recentProducts = [...products].sort((left, right) => right.id - left.id).slice(0, 6);
+  const categorySummary = categoryLabels.map((label) => ({
+    label,
+    count: categoryCounts[label],
+  }));
+
+  const summaryCards = [
+    {
+      icon: "fas fa-boxes-stacked",
+      label: "Total Products",
+      value: products.length,
+    },
+    {
+      icon: "fas fa-tags",
+      label: "Sale Items",
+      value: saleCount,
+    },
+    {
+      icon: "fas fa-truck-fast",
+      label: "Free Shipping",
+      value: freeShippingCount,
+    },
+    {
+      icon: "fas fa-warehouse",
+      label: "Inventory Value",
+      value: `Rs ${inventoryValue.toLocaleString()}`,
+    },
+  ];
+
+  const categoryChartData = buildChartData(
+    categoryLabels,
+    categoryLabels.map((label) => categoryCounts[label]),
+    "Products by category",
+    "rgba(239, 68, 68, 1)",
+    "rgba(239, 68, 68, 0.22)"
+  );
+
+  const cityChartData = buildChartData(
+    cityLabels,
+    cityLabels.map((label) => cityCounts[label]),
+    "Products by city",
+    "rgba(56, 189, 248, 1)",
+    "rgba(56, 189, 248, 0.22)"
+  );
+
+  if (loading) {
     return (
-        <div className="min-h-screen flex">
-            {/* Sidebar */}
-            <aside
-                className={`fixed top-0 left-0 h-screen w-64 bg-gray-900 text-white transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                    } transition-transform lg:translate-x-0`}
-            >
-                <div className="p-4">
-                    <h3 className="text-2xl font-bold text-red-500">Autopart Bazar</h3>
-                </div>
-                <nav className="mt-6">
-                    <ul>
-                        <li className="mb-4">
-                            <a
-                                href="/addproduct"
-                                className="block py-4 px-6 text-lg text-gray-300 hover:bg-black hover:text-red-500 rounded-lg"
-                            >
-                                Add product
-                            </a>
-                        </li>
-                        <li className="mb-4">
-                            <a
-                                href="/removeproduct"
-                                className="block py-4 px-6 text-lg text-gray-300 hover:bg-black hover:text-red-500 rounded-lg"
-                            >
-                                Remove product
-                            </a>
-                        </li>
-                        <li className="mb-4">
-                            <a
-                                href="/updateproduct"
-                                className="block py-4 px-6 text-lg text-gray-300 hover:bg-black hover:text-red-500 rounded-lg"
-                            >
-                                Update product
-                            </a>
-                        </li>
-                    </ul>
-                </nav>
-            </aside>
-
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col bg-black lg:ml-64">
-                {/* Navbar */}
-                <header className="bg-gray-900 text-white flex items-center px-6 py-4 relative">
-                    {/* Dashboard Title */}
-                    <h1 className="absolute left-1/2 transform -translate-x-1/2 text-2xl font-semibold text-red-500">
-                        Dashboard
-                    </h1>
-
-                    {/* Right Section */}
-                    <div className="ml-auto relative">
-                        <button
-                            onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                            className="flex items-center text-gray-300 focus:outline-none"
-                        >
-                            <img
-                                src="/Images/admin.jpeg"
-                                alt="Profile"
-                                className="w-8 h-8 rounded-full"
-                            />
-                            <span className="ml-2 text-sm">Admin</span>
-                        </button>
-                    </div>
-                </header>
-
-                {/* Dashboard Content */}
-                <main className="p-6">
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="bg-gray-900 rounded shadow p-4">
-                            <div className="flex items-center space-x-4">
-                                <i className="fas fa-chart-line text-red-500 text-2xl"></i>
-                                <div>
-                                    <p className="text-gray-300">Today Sale</p>
-                                    <p className="text-white text-xl font-semibold">$1234</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-gray-900 rounded shadow p-4">
-                            <div className="flex items-center space-x-4">
-                                <i className="fas fa-chart-bar text-red-500 text-2xl"></i>
-                                <div>
-                                    <p className="text-gray-300">Total Return</p>
-                                    <p className="text-white text-xl font-semibold">$5678</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-gray-900 rounded shadow p-4">
-                            <div className="flex items-center space-x-4">
-                                <i className="fas fa-chart-area text-red-500 text-2xl"></i>
-                                <div>
-                                    <p className="text-gray-300">Today Revenue</p>
-                                    <p className="text-white text-xl font-semibold">$91011</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-gray-900 rounded shadow p-4">
-                            <div className="flex items-center space-x-4">
-                                <i className="fas fa-chart-pie text-red-500 text-2xl"></i>
-                                <div>
-                                    <p className="text-gray-300">Total Loss</p>
-                                    <p className="text-white text-xl font-semibold">$121314</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Charts */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mt-6">
-                        <div className="bg-gray-900 rounded shadow p-4 h-full">
-                            <h6 className="mb-4 text-white">Single Line Chart</h6>
-                            <Line data={lineChartData} options={chartOptions} />
-                        </div>
-                        <div className="bg-gray-900 rounded shadow p-4 h-full">
-                            <h6 className="mb-4 text-white">Revenue Line Chart</h6>
-                            <Line data={revenueChartData} options={chartOptions} />
-                        </div>
-                    </div>
-
-                    {/* Pending Deliveries Table */}
-                    <div className="bg-gray-900 rounded shadow mt-6">
-                        <h6 className="p-4 text-lg text-white">Pending Deliveries</h6>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead className="bg-gray-800">
-                                    <tr>
-                                        <th className="px-4 py-2 text-white border-b border-gray-700">ID</th>
-                                        <th className="px-4 py-2 text-white border-b border-gray-700">First Name</th>
-                                        <th className="px-4 py-2 text-white border-b border-gray-700">Last Name</th>
-                                        <th className="px-4 py-2 text-white border-b border-gray-700">Email</th>
-                                        <th className="px-4 py-2 text-white border-b border-gray-700">City</th>
-                                        <th className="px-4 py-2 text-white border-b border-gray-700">Zip</th>
-                                        <th className="px-4 py-2 text-white border-b border-gray-700">Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="text-white">
-                                    {showMore
-                                        ? [...initialData, ...additionalData].map((item) => (
-                                            <tr key={item.id} className="border-b border-gray-700">
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.id}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.firstName}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.lastName}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.email}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.city}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.zip}</td>
-                                                <td className="px-4 py-2">{item.status}</td>
-                                            </tr>
-                                        ))
-                                        : initialData.map((item) => (
-                                            <tr key={item.id} className="border-b border-gray-700">
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.id}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.firstName}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.lastName}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.email}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.city}</td>
-                                                <td className="px-4 py-2 border-r border-gray-700">{item.zip}</td>
-                                                <td className="px-4 py-2">{item.status}</td>
-                                            </tr>
-                                        ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div className="p-4 flex justify-center">
-                            <button
-                                onClick={() => setShowMore(!showMore)}
-                                className="text-red-500 text-sm"
-                            >
-                                {showMore ? 'Show Less' : 'Show More'}
-                            </button>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-    {/* Order Dispatched Table */}
-    <div className="bg-gray-900 rounded shadow p-4">
-        <div className="flex justify-between items-center mb-4">
-            <h6 className="text-white text-lg">Order Dispatched</h6>
-            <a href="#" className="text-red-500 text-sm">Show All</a>
-        </div>
-        <ul>
-            {[
-                { id: 'P101', firstName: 'Ahmad', timestamp: '10 minutes ago' },
-                { id: 'P102', firstName: 'Sara', timestamp: '20 minutes ago' },
-                { id: 'P103', firstName: 'Ali', timestamp: '30 minutes ago' },
-                { id: 'P104', firstName: 'Hassan', timestamp: '45 minutes ago' },
-            ].map((item, index) => (
-                <li
-                    key={index}
-                    className="flex justify-between items-center mb-2 border-b border-gray-800 pb-2"
-                >
-                    <div>
-                        <p className="text-white">Product ID: {item.id}</p>
-                        <p className="text-gray-400 text-sm">First Name: {item.firstName}</p>
-                    </div>
-                    <p className="text-gray-400 text-sm">{item.timestamp}</p>
-                </li>
-            ))}
-        </ul>
-    </div>
-
-    {/* Delivered Table */}
-    <div className="bg-gray-900 rounded shadow p-4">
-        <div className="flex justify-between items-center mb-4">
-            <h6 className="text-white text-lg">Delivered</h6>
-            <a href="#" className="text-red-500 text-sm">Show All</a>
-        </div>
-        <ul>
-            {[
-                { id: 'P201', firstName: 'Zain', timestamp: '1 hour ago' },
-                { id: 'P202', firstName: 'Mariam', timestamp: '2 hours ago' },
-                { id: 'P203', firstName: 'Usman', timestamp: '3 hours ago' },
-                { id: 'P204', firstName: 'Noor', timestamp: '4 hours ago' },
-            ].map((item, index) => (
-                <li
-                    key={index}
-                    className="flex justify-between items-center mb-2 border-b border-gray-800 pb-2"
-                >
-                    <div>
-                        <p className="text-white">Product ID: {item.id}</p>
-                        <p className="text-gray-400 text-sm">First Name: {item.firstName}</p>
-                    </div>
-                    <p className="text-gray-400 text-sm">{item.timestamp}</p>
-                </li>
-            ))}
-        </ul>
-    </div>
-</div>
-
-
-                    <footer className="bg-secondary mt-auto p-4">
-                        <div className="container-fluid">
-                            <div className="row">
-                                <div className="col-12 col-sm-6 text-center text-sm-start text-gray-300">
-                                    &copy; <a href="#" className="text-white">AutopartBazar</a>, All Right Reserved.
-                                </div>
-                            </div>
-                        </div>
-                    </footer>
-                </main>
-            </div>
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-black text-white">
+        Loading dashboard...
+      </div>
     );
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black px-4 text-center text-red-400">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex bg-black">
+      <aside className="hidden h-screen w-64 shrink-0 border-r border-gray-800 bg-gray-950 text-white lg:block">
+        <div className="p-6">
+          <h3 className="text-2xl font-bold text-red-500">Autopart Bazaar</h3>
+          <p className="mt-2 text-sm text-gray-400">Live inventory admin</p>
+        </div>
+        <nav className="px-4 pb-6">
+          <ul className="space-y-2">
+            <li>
+              <Link
+                to="/addproduct"
+                className="block rounded-lg px-4 py-3 text-gray-300 transition-colors hover:bg-black hover:text-red-500"
+              >
+                Add product
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/removeproduct"
+                className="block rounded-lg px-4 py-3 text-gray-300 transition-colors hover:bg-black hover:text-red-500"
+              >
+                Remove product
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/updateproduct"
+                className="block rounded-lg px-4 py-3 text-gray-300 transition-colors hover:bg-black hover:text-red-500"
+              >
+                Update product
+              </Link>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+
+      <div className="flex-1">
+        <header className="border-b border-gray-800 bg-gray-950 px-6 py-5 text-white">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold text-red-500">Dashboard</h1>
+              <p className="mt-1 text-sm text-gray-400">
+                Inventory snapshot pulled live from `/products`.
+              </p>
+            </div>
+            <div className="text-sm text-gray-400">
+              Unique makes: <span className="text-white">{uniqueMakes.size}</span>
+            </div>
+          </div>
+        </header>
+
+        <main className="space-y-6 p-6">
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+            Revenue, returns, and delivery analytics are intentionally omitted until the backend exposes real endpoints for them.
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+            {summaryCards.map((card) => (
+              <div key={card.label} className="rounded-2xl border border-gray-800 bg-gray-900 p-5 shadow">
+                <div className="flex items-center space-x-4">
+                  <i className={`${card.icon} text-2xl text-red-500`}></i>
+                  <div>
+                    <p className="text-sm text-gray-400">{card.label}</p>
+                    <p className="text-xl font-semibold text-white">{card.value}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <h2 className="mb-4 text-lg font-semibold text-white">Category Mix</h2>
+              <Line data={categoryChartData} options={chartOptions} />
+            </div>
+            <div className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+              <h2 className="mb-4 text-lg font-semibold text-white">City Distribution</h2>
+              <Line data={cityChartData} options={chartOptions} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+            <div className="rounded-2xl border border-gray-800 bg-gray-900">
+              <div className="flex items-center justify-between border-b border-gray-800 px-5 py-4">
+                <h2 className="text-lg font-semibold text-white">Recent Products</h2>
+                <span className="text-sm text-gray-400">{products.length} total</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-gray-950 text-sm text-gray-400">
+                    <tr>
+                      <th className="px-5 py-3">Product ID</th>
+                      <th className="px-5 py-3">Name</th>
+                      <th className="px-5 py-3">Category</th>
+                      <th className="px-5 py-3">City</th>
+                      <th className="px-5 py-3">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm text-white">
+                    {recentProducts.length === 0 && (
+                      <tr>
+                        <td colSpan="5" className="px-5 py-6 text-center text-gray-400">
+                          No products have been added yet.
+                        </td>
+                      </tr>
+                    )}
+                    {recentProducts.map((product) => (
+                      <tr key={product.id} className="border-t border-gray-800">
+                        <td className="px-5 py-3">{product.productId}</td>
+                        <td className="px-5 py-3">{product.name}</td>
+                        <td className="px-5 py-3">{product.category || "-"}</td>
+                        <td className="px-5 py-3">{product.city || "-"}</td>
+                        <td className="px-5 py-3">Rs {product.price}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-800 bg-gray-900">
+              <div className="border-b border-gray-800 px-5 py-4">
+                <h2 className="text-lg font-semibold text-white">Category Summary</h2>
+              </div>
+              <div className="divide-y divide-gray-800">
+                {categorySummary.length === 0 && (
+                  <div className="px-5 py-6 text-sm text-gray-400">
+                    No category data yet.
+                  </div>
+                )}
+                {categorySummary.map((item) => (
+                  <div key={item.label} className="flex items-center justify-between px-5 py-4">
+                    <div>
+                      <p className="text-sm font-medium text-white">{item.label}</p>
+                      <p className="text-xs text-gray-400">Live product count</p>
+                    </div>
+                    <span className="rounded-full bg-red-500/15 px-3 py-1 text-sm text-red-300">
+                      {item.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
 }

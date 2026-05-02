@@ -6,6 +6,7 @@
     "setup": "powershell -ExecutionPolicy Bypass -File ./scripts/setup.ps1",
     "install:frontend": "npm.cmd --prefix frontend install",
     "install:backend": "powershell -ExecutionPolicy Bypass -File ./scripts/setup.ps1 -SkipFrontend",
+    "migrate:backend": "powershell -ExecutionPolicy Bypass -Command \"Set-Location backend; .\\autopart_venv\\Scripts\\python.exe -m alembic upgrade head\"",
     "dev:frontend": "npm.cmd --prefix frontend run dev",
     "dev:backend": "powershell -ExecutionPolicy Bypass -Command \"Set-Location backend; .\\autopart_venv\\Scripts\\python.exe -m uvicorn main:app --reload\""
   }

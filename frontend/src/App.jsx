@@ -9,10 +9,10 @@ import Cart from "@/pages/Cart.jsx";
 import ChangePass from "@/pages/ChangePass.jsx";
 import Checkout from "@/pages/Checkout.jsx";
 import Contact from "@/pages/Contact.jsx";
+import Credits from "@/pages/Credits.jsx";
 import EnterEmail from "@/pages/EnterEmail.jsx";
 import ForgetPass from "@/pages/ForgetPass.jsx";
 import Garage from "@/pages/Garage.jsx";
-import Garage1 from "@/pages/Garage1.jsx";
 import Home from "@/pages/Home.jsx";
 import Login from "@/pages/Login.jsx";
 import OrderConfirmation from "@/pages/OrderConfirmation.jsx";
@@ -51,10 +51,10 @@ export default function App() {
       <Route path="/about" element={<About />} />
       <Route path="/contact" element={<Contact />} />
       <Route path="/blog" element={<Blog />} />
+      <Route path="/credits" element={<Credits />} />
 
       <Route path="/viewmodel" element={<ViewModel />} />
       <Route path="/garage" element={<Garage />} />
-      <Route path="/garage1" element={<Garage1 />} />
 
       <Route path="/addproduct" element={<AddProduct />} />
       <Route path="/updateproduct" element={<UpdateProduct />} />

@@ -84,7 +84,7 @@ export default function ForgetPass() {
         setError(data.error || "Failed to resend OTP.");
       }
     } catch (err) {
-      setError("An error occurred while resending OTP.");
+      setError(err.response?.data?.detail || "An error occurred while resending OTP.");
     }
   };
 
