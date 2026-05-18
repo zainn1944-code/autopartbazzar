@@ -155,6 +155,11 @@ async def main() -> None:
                 "free_shipping": item["free_shipping"],
                 "image_url": item.get("image_url"),
                 "model_url": None,
+                "stock_quantity": item.get("stock_quantity", 50),
+                "source_name": item.get("source"),
+                "source_url": item.get("source_url"),
+                "external_id": item.get("product_id"),
+                "is_live_listing": True,
             }
 
             result = await db.execute(

@@ -15,7 +15,7 @@ export default function ShoppingCart() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-[#050505] selection:bg-red-500/30">
+      <div className="min-h-screen bg-gray-50 dark:bg-[#050505] selection:bg-red-500/30">
         {/* Premium Header */}
         <div className="relative border-b border-white/5 bg-black">
           <div className="absolute inset-0 bg-gradient-to-r from-red-900/10 via-black to-black" />

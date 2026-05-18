@@ -3,9 +3,11 @@ import Navbar from "@/components/ui/navbar";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
+import { useCart } from "@/context/CartContext.jsx";
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const { cart, clearCart } = useCart();
 
   // States for form data
   const [shippingInfo, setShippingInfo] = useState({
@@ -17,17 +19,15 @@ export default function Checkout() {
     country: "",
   });
 
-  const [cartItems, setCartItems] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch cart items from localStorage
   useEffect(() => {
-    const storedCart = JSON.parse(localStorage.getItem("cart")) || [];
-    if (storedCart.length === 0) {
+    if (cart.length === 0) {
       navigate("/cart"); // Redirect if empty
     }
-    setCartItems(storedCart);
-  }, [navigate]);
+  }, [cart.length, navigate]);
+
+  const cartItems = cart;
 
   const subtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
   const shipping = 250;
@@ -53,9 +53,19 @@ export default function Checkout() {
 
     const orderData = {
       items: cartItems.map((item) => ({
-        product: item.id,
+        product: item.kind === "catalog" ? item.productRef || item.id : null,
         quantity: item.quantity,
         price: item.price,
+        snapshot:
+          item.snapshot || {
+            itemType: item.kind || "catalog",
+            name: item.name,
+            make: item.make || null,
+            category: item.category || null,
+            imageUrl: item.imageUrl || null,
+            description: item.description || null,
+            productRef: item.productRef || null,
+          },
       })),
       totalAmount: total,
       shippingAddress: shippingInfo,
@@ -65,7 +75,7 @@ export default function Checkout() {
       const response = await axiosInstance.post("/orders", orderData);
       if (response.status >= 200 && response.status < 300) {
         localStorage.setItem("orderDetails", JSON.stringify(response.data));
-        localStorage.removeItem("cart");
+        clearCart();
         navigate("/order-confirmation");
       } else {
         alert("Failed to place order. Please try again.");
@@ -79,7 +89,7 @@ export default function Checkout() {
   };
 
   return (
-    <div className="bg-[#050505] text-white min-h-screen selection:bg-red-500/30">
+    <div className="bg-gray-50 dark:bg-[#050505] text-gray-900 dark:text-white min-h-screen selection:bg-red-500/30">
       <Navbar />
       
       {/* Premium Header */}

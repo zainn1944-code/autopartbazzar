@@ -36,6 +36,11 @@ const VISUAL_THEMES = {
     glow: "rgba(239, 68, 68, 0.28)",
     label: "Body kit",
   },
+  Configurator: {
+    accent: "#f97316",
+    glow: "rgba(249, 115, 22, 0.28)",
+    label: "Custom build",
+  },
   default: {
     accent: "#94a3b8",
     glow: "rgba(148, 163, 184, 0.22)",

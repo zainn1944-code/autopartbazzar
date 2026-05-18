@@ -1,29 +1,66 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Parallax } from "react-parallax";
+import { Canvas } from "@react-three/fiber";
+import { Float, PresentationControls, Stage, useGLTF } from "@react-three/drei";
+import { FaStar } from "react-icons/fa";
 import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
-import { Parallax } from "react-parallax";
-import { FaStar, FaRegStar } from "react-icons/fa";
-import { Canvas } from "@react-three/fiber";
-import { useGLTF, PresentationControls, Stage, Float } from "@react-three/drei";
+import axiosInstance from "@/api/axiosInstance";
+import { useRecentlyViewed } from "@/hooks/useRecentlyViewed.js";
 
-// Mini 3D Model Component for the Home Page
 function Home3DCar() {
   const { scene } = useGLTF("/models/bmw/m4.glb");
-  return (
-    <primitive object={scene} />
-  );
+  return <primitive object={scene} />;
 }
 
+useGLTF.preload("/models/bmw/m4.glb");
+
+const REVIEW_LEVELS = [5, 4, 3, 2, 1];
+
 export default function Home() {
+  const { items: recentlyViewed, clearItems } = useRecentlyViewed();
+  const [reviewStats, setReviewStats] = useState({
+    total: 0,
+    average: 0,
+    percentages: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 },
+  });
+
+  useEffect(() => {
+    const loadReviewStats = async () => {
+      try {
+        const { data } = await axiosInstance.get("/reviews/stats");
+        setReviewStats({
+          total: data.total || 0,
+          average: data.average || 0,
+          percentages: data.percentages || { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 },
+        });
+      } catch {
+        setReviewStats({
+          total: 0,
+          average: 0,
+          percentages: { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 },
+        });
+      }
+    };
+
+    loadReviewStats();
+  }, []);
+
+  const ratingSummary = useMemo(() => {
+    const total = reviewStats.total || 0;
+    const average = reviewStats.average || 0;
+    const rounded = Math.round(average);
+    return { total, average, rounded };
+  }, [reviewStats.average, reviewStats.total]);
+
   return (
     <>
       <Navbar />
 
-      {/* Hero Section */}
-      <div className="relative h-screen bg-black overflow-hidden selection:bg-red-500/30">
+      <div className="relative h-screen overflow-hidden bg-black selection:bg-red-500/30">
         <video
-          className="absolute top-0 left-0 w-full h-full object-cover opacity-60"
+          className="absolute left-0 top-0 h-full w-full object-cover opacity-60"
           autoPlay
           loop
           muted
@@ -35,26 +72,29 @@ export default function Home() {
 
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/80" />
 
-        <div className="relative z-10 flex items-center justify-center h-full text-center text-white px-4 md:px-8">
-          <div className="max-w-4xl space-y-8 backdrop-blur-sm p-8 rounded-3xl">
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-gray-200 to-gray-500 drop-shadow-2xl">
+        <div className="relative z-10 flex h-full items-center justify-center px-4 text-center text-white md:px-8">
+          <div className="max-w-4xl space-y-8 rounded-3xl p-8 backdrop-blur-sm">
+            <h1 className="bg-gradient-to-r from-white via-gray-200 to-gray-500 bg-clip-text text-5xl font-extrabold tracking-tight text-transparent drop-shadow-2xl md:text-6xl lg:text-7xl">
               Precision Performance.
               <br />
-              <span className="text-red-500 bg-none bg-clip-border text-transparent bg-gradient-to-r from-red-600 to-red-400">Unleashed.</span>
+              <span className="bg-gradient-to-r from-red-600 to-red-400 bg-clip-text text-transparent">
+                Unleashed.
+              </span>
             </h1>
-            <p className="text-lg md:text-xl text-gray-300 font-medium max-w-2xl mx-auto leading-relaxed">
-              Discover the ultimate marketplace for high-end auto parts and accessories. Elevate your build with our immersive 3D configurator.
+            <p className="mx-auto max-w-2xl text-lg font-medium leading-relaxed text-gray-300 md:text-xl">
+              Discover the ultimate marketplace for high-end auto parts and accessories.
+              Elevate your build with our immersive 3D configurator.
             </p>
-            <div className="flex flex-col sm:flex-row justify-center items-center gap-6 pt-4">
-              <a
-                href="#features"
-                className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-red-600 to-red-500 text-white font-bold text-lg rounded-xl shadow-[0_0_20px_rgba(220,38,38,0.4)] hover:shadow-[0_0_30px_rgba(220,38,38,0.6)] hover:scale-105 transition-all duration-300"
+            <div className="flex flex-col items-center justify-center gap-6 pt-4 sm:flex-row">
+              <Link
+                to="/productlist"
+                className="w-full rounded-xl bg-gradient-to-r from-red-600 to-red-500 px-8 py-4 text-lg font-bold text-white shadow-[0_0_20px_rgba(220,38,38,0.4)] transition-all duration-300 hover:scale-105 hover:shadow-[0_0_30px_rgba(220,38,38,0.6)] sm:w-auto"
               >
-                Shop Now
-              </a>
+                Browse Catalog
+              </Link>
               <Link
                 to="/viewmodel"
-                className="w-full sm:w-auto px-8 py-4 border-2 border-white/20 bg-white/5 backdrop-blur-md text-white font-bold text-lg rounded-xl hover:bg-white/10 hover:border-white/40 transition-all duration-300"
+                className="w-full rounded-xl border-2 border-white/20 bg-white/5 px-8 py-4 text-lg font-bold text-white backdrop-blur-md transition-all duration-300 hover:border-white/40 hover:bg-white/10 sm:w-auto"
               >
                 Customize in 3D
               </Link>
@@ -63,104 +103,90 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Features Section */}
-      <div className="bg-[#050505]">
-        <section
-          id="features"
-          className="relative block px-6 py-24 md:px-10 border-t border-white/5"
-        >
-          <div className="relative mx-auto max-w-5xl text-center mb-16">
-            <span className="text-red-500 mb-4 block font-bold uppercase tracking-[0.2em] text-sm">
+      <div className="bg-white dark:bg-[#050505]">
+        <section id="features" className="relative block border-t border-white/5 px-6 py-24 md:px-10">
+          <div className="relative mx-auto mb-16 max-w-5xl text-center">
+            <span className="mb-4 block text-sm font-bold uppercase tracking-[0.2em] text-red-500">
               Why Choose AutoPartBazaar
             </span>
-            <h2 className="block w-full bg-gradient-to-b from-white to-gray-400 bg-clip-text font-extrabold text-transparent text-4xl sm:text-5xl">
+            <h2 className="block w-full bg-gradient-to-b from-white to-gray-400 bg-clip-text text-4xl font-extrabold text-transparent sm:text-5xl">
               Build the Perfect Ride
             </h2>
-            <p className="mx-auto mt-6 w-full max-w-2xl text-center text-lg leading-relaxed text-gray-400">
-              AutoPartBazaar offers a seamless way to customize your car. From finding the perfect exterior parts to visualizing them in real-time 3D.
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-gray-400">
+              AutoPartBazaar offers a seamless way to customize your car, from finding the right
+              exterior parts to visualizing them in real-time 3D.
             </p>
           </div>
 
-          <div className="relative mx-auto max-w-7xl z-10 grid grid-cols-1 gap-8 pt-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="relative z-10 mx-auto grid max-w-7xl grid-cols-1 gap-8 pt-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
               {
                 title: "Customizable Parts",
-                desc: "From bumpers to spoilers, customize your car with a wide variety of exterior parts, all tailored to your car’s make and model.",
-                icon: (
-                  <path d="M4 13v-5h16v5l3 5h-22l3 -5z M5 17l1 -1h12l1 1 M7 9v-3a3 3 0 0 1 6 0v3 M17 9v-3a3 3 0 0 0 -6 0v3" />
-                )
+                desc: "From bumpers to spoilers, customize your car with exterior parts tailored to your make and model.",
+                icon: <path d="M4 13v-5h16v5l3 5h-22l3 -5z M5 17l1 -1h12l1 1 M7 9v-3a3 3 0 0 1 6 0v3 M17 9v-3a3 3 0 0 0 -6 0v3" />,
               },
               {
                 title: "Fast Delivery",
-                desc: "Get the parts you need quickly and efficiently, with fast shipping to ensure you never have to wait too long to enhance your ride.",
-                icon: (
-                  <path d="M12 3v18a9 9 0 1 0 9 -9h-9 M12 6a6 6 0 1 1 -6 6h6 M15 9l2 2" />
-                )
+                desc: "Get the parts you need quickly, with shipping built to keep your project moving.",
+                icon: <path d="M12 3v18a9 9 0 1 0 9 -9h-9 M12 6a6 6 0 1 1 -6 6h6 M15 9l2 2" />,
               },
               {
                 title: "Everything You Need",
-                desc: "We provide all the tools you need to visualize, select, and order car parts without the hassle. Find everything in one place.",
-                icon: (
-                  <path d="M3 21h4l13 -13a1.5 1.5 0 0 0 -4 -4l-13 13v4 M14.5 5.5l4 4 M12 8l-5 -5l-4 4l5 5 M7 8l-1.5 1.5 M16 12l5 5l-4 4l-5 -5 M16 17l-1.5 1.5" />
-                )
-              }
-            ].map((feature, i) => (
-              <div key={i} className="group rounded-3xl border border-white/5 bg-white/[0.02] p-8 text-center backdrop-blur-md transition-all hover:bg-white/[0.04] hover:border-white/10 hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-500/10">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-red-600 to-red-900 shadow-[0_0_15px_rgba(220,38,38,0.3)] mb-6 transition-transform group-hover:scale-110">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="text-white h-8 w-8" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                desc: "Visualize, select, and order parts without the usual marketplace friction.",
+                icon: <path d="M3 21h4l13 -13a1.5 1.5 0 0 0 -4 -4l-13 13v4 M14.5 5.5l4 4 M12 8l-5 -5l-4 4l5 5 M7 8l-1.5 1.5 M16 12l5 5l-4 4l-5 -5 M16 17l-1.5 1.5" />,
+              },
+            ].map((feature) => (
+              <div
+                key={feature.title}
+                className="group rounded-3xl border border-white/5 bg-white/[0.02] p-8 text-center backdrop-blur-md transition-all hover:-translate-y-1 hover:border-white/10 hover:bg-white/[0.04] hover:shadow-2xl hover:shadow-red-500/10"
+              >
+                <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-red-600 to-red-900 shadow-[0_0_15px_rgba(220,38,38,0.3)] transition-transform group-hover:scale-110">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" fill="none" strokeLinecap="round" strokeLinejoin="round">
                     <path stroke="none" d="M0 0h24v24H0z" fill="none" />
                     {feature.icon}
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-white mb-4">{feature.title}</h3>
-                <p className="text-gray-400 leading-relaxed">
-                  {feature.desc}
-                </p>
+                <h3 className="mb-4 text-xl font-bold text-white">{feature.title}</h3>
+                <p className="leading-relaxed text-gray-400">{feature.desc}</p>
               </div>
             ))}
           </div>
         </section>
       </div>
 
-      {/* Parallax Image Section */}
       <section>
-        <Parallax
-          className="h-[600px] relative"
-          bgImage="/Images/car1.jpg"
-          strength={300}
-        >
+        <Parallax className="relative h-[600px]" bgImage="/Images/car1.jpg" strength={300}>
           <div className="absolute inset-0 bg-gradient-to-b from-[#050505] via-black/60 to-[#050505]" />
           <div className="absolute inset-0 flex items-center justify-center">
-            <h2 className="text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-500 tracking-tighter drop-shadow-2xl">
+            <h2 className="bg-gradient-to-b from-white to-gray-500 bg-clip-text text-5xl font-black tracking-tighter text-transparent drop-shadow-2xl md:text-7xl">
               UNLEASH YOUR CREATIVITY
             </h2>
           </div>
         </Parallax>
       </section>
 
-      {/* Visualizer Section with Interactive 3D Canvas */}
-      <section className="bg-[#050505] py-24 relative overflow-hidden border-b border-white/5">
-        <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-red-600/10 blur-[120px] rounded-full pointer-events-none" />
-        <div className="max-w-7xl mx-auto px-6 flex flex-col items-center lg:items-start lg:flex-row relative z-10 gap-16">
-          <div className="lg:w-1/2 text-center lg:text-left flex flex-col justify-center">
-            <span className="text-red-500 font-bold uppercase tracking-[0.2em] text-sm mb-4">Interactive 3D</span>
-            <h2 className="text-4xl md:text-5xl font-extrabold text-white leading-tight mb-6">
+      <section className="relative overflow-hidden border-b border-white/5 bg-gray-100 dark:bg-[#050505] py-24">
+        <div className="pointer-events-none absolute right-0 top-0 h-[800px] w-[800px] rounded-full bg-red-600/10 blur-[120px]" />
+        <div className="relative z-10 mx-auto flex max-w-7xl flex-col items-center gap-16 px-6 lg:flex-row lg:items-start">
+          <div className="flex flex-col justify-center text-center lg:w-1/2 lg:text-left">
+            <span className="mb-4 text-sm font-bold uppercase tracking-[0.2em] text-red-500">Interactive 3D</span>
+            <h2 className="mb-6 text-4xl font-extrabold leading-tight text-white md:text-5xl">
               THE GARAGE VISUALIZER
             </h2>
-            <p className="text-lg text-gray-400 mb-8 leading-relaxed max-w-xl mx-auto lg:mx-0">
-              AutoPartBazaar's Configurator allows you to visualize your car in real-time 3D. Swap parts, change colors, and interact with your dream build before you buy.
+            <p className="mb-8 mx-auto max-w-xl text-lg leading-relaxed text-gray-400 lg:mx-0">
+              Configure your car in real time, swap parts, test paint, and turn the result into a
+              cart-ready build instead of a disconnected demo.
             </p>
             <Link to="/viewmodel">
-              <button className="px-8 py-4 bg-white text-black font-bold text-lg rounded-xl hover:bg-gray-200 transition-colors shadow-lg shadow-white/10 w-fit mx-auto lg:mx-0">
+              <button className="mx-auto w-fit rounded-xl bg-white px-8 py-4 text-lg font-bold text-black shadow-lg shadow-white/10 transition-colors hover:bg-gray-200 lg:mx-0">
                 Launch Visualizer
               </button>
             </Link>
           </div>
-          
-          <div className="lg:w-1/2 flex items-center justify-center relative w-full h-[400px] md:h-[500px]">
-            {/* Live 3D Canvas Animation */}
-            <div className="absolute inset-0 rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent backdrop-blur-md overflow-hidden shadow-2xl flex items-center justify-center cursor-grab active:cursor-grabbing">
-              <Canvas shadows camera={{ position: [5, 2, 8], fov: 45 }}>
+
+          <div className="relative flex h-[400px] w-full items-center justify-center md:h-[500px] lg:w-1/2">
+            <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent backdrop-blur-md shadow-2xl">
+              <Canvas dpr={[1, 1.5]} shadows camera={{ position: [5, 2, 8], fov: 45 }}>
                 <Suspense fallback={null}>
                   <Float speed={2} rotationIntensity={0.5} floatIntensity={1.5}>
                     <PresentationControls
@@ -178,8 +204,7 @@ export default function Home() {
                   </Float>
                 </Suspense>
               </Canvas>
-              {/* Overlay Hint */}
-              <div className="absolute bottom-4 right-4 text-xs font-semibold uppercase tracking-widest text-white/50 bg-black/50 px-3 py-1.5 rounded-full backdrop-blur-md pointer-events-none">
+              <div className="pointer-events-none absolute bottom-4 right-4 rounded-full bg-black/50 px-3 py-1.5 text-xs font-semibold uppercase tracking-widest text-white/50 backdrop-blur-md">
                 Drag to Rotate
               </div>
             </div>
@@ -187,27 +212,26 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Shopping Guide Section */}
-      <section id="shopping-guide" className="bg-[#0a0a0a] py-24 px-6">
-        <div className="max-w-7xl mx-auto text-center">
-          <span className="text-red-500 font-bold uppercase tracking-[0.2em] text-sm mb-4 block">How It Works</span>
-          <h2 className="text-4xl sm:text-5xl font-extrabold text-white mb-16">
-            Your Shopping Guide
-          </h2>
+      <section id="shopping-guide" className="bg-gray-50 dark:bg-[#0a0a0a] px-6 py-24">
+        <div className="mx-auto max-w-7xl text-center">
+          <span className="mb-4 block text-sm font-bold uppercase tracking-[0.2em] text-red-500">How It Works</span>
+          <h2 className="mb-16 text-4xl font-extrabold text-white sm:text-5xl">Your Shopping Guide</h2>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid gap-8 md:grid-cols-3">
             {[
-              { step: "1", title: "Browse Catalog", desc: "Start by exploring our high-performance inventory." },
-              { step: "2", title: "Customize", desc: "Use our 3D visualization tool to test parts before buying." },
-              { step: "3", title: "Checkout", desc: "Add to cart and proceed with our secure checkout flow." }
-            ].map((item, i) => (
-              <div key={i} className="relative rounded-3xl border border-white/5 bg-white/5 p-10 text-left backdrop-blur-md hover:bg-white/10 transition-colors">
-                {/* The background numbers have been completely removed here */}
-                <div className="h-12 w-12 rounded-xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-500 font-bold text-xl mb-6">
+              { step: "1", title: "Browse Catalog", desc: "Explore the performance inventory that fits your build." },
+              { step: "2", title: "Customize", desc: "Use the 3D visualization tool to test parts before buying." },
+              { step: "3", title: "Checkout", desc: "Add parts or saved builds to cart and finish the order securely." },
+            ].map((item) => (
+              <div
+                key={item.step}
+                className="relative rounded-3xl border border-white/5 bg-white/5 p-10 text-left backdrop-blur-md transition-colors hover:bg-white/10"
+              >
+                <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl border border-red-500/30 bg-red-600/20 text-xl font-bold text-red-500">
                   {item.step}
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-4 relative z-10">{item.title}</h3>
-                <p className="text-gray-400 relative z-10">{item.desc}</p>
+                <h3 className="relative z-10 mb-4 text-2xl font-bold text-white">{item.title}</h3>
+                <p className="relative z-10 text-gray-400">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -215,10 +239,10 @@ export default function Home() {
           <div className="mt-16">
             <Link
               to="/productlist"
-              className="inline-flex items-center gap-2 text-lg text-red-500 hover:text-red-400 font-bold tracking-wide transition-colors"
+              className="inline-flex items-center gap-2 text-lg font-bold tracking-wide text-red-500 transition-colors hover:text-red-400"
             >
               Start Shopping Now
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
               </svg>
             </Link>
@@ -226,69 +250,129 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Reviews Section */}
-      <section className="py-24 relative bg-[#050505] border-t border-white/5">
-        <div className="w-full max-w-7xl px-6 mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="font-extrabold text-4xl sm:text-5xl text-white mb-4">
-              Community Ratings
-            </h2>
-            <p className="text-gray-400 text-lg">See what other builders are saying about AutoPartBazaar.</p>
+      <section className="relative border-t border-white/5 bg-[#050505] py-24">
+        <div className="mx-auto w-full max-w-7xl px-6">
+          <div className="mb-16 text-center">
+            <h2 className="mb-4 text-4xl font-extrabold text-white sm:text-5xl">Community Ratings</h2>
+            <p className="text-lg text-gray-400">Live review signals from products across the marketplace.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            {/* Rating Summary */}
-            <div className="lg:col-span-5 flex flex-col justify-center">
-              <div className="flex flex-col gap-6 w-full max-w-md mx-auto lg:mx-0">
-                {[5, 4, 3, 2, 1].map((rating, index) => {
-                  const percentage = rating * 20; 
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
+            <div className="flex flex-col justify-center lg:col-span-5">
+              <div className="mx-auto flex w-full max-w-md flex-col gap-6 lg:mx-0">
+                {REVIEW_LEVELS.map((rating) => {
+                  const percentage = reviewStats.percentages?.[String(rating)] || 0;
                   return (
-                    <div key={index} className="flex items-center w-full group">
-                      <div className="flex items-center gap-1 w-20">
-                        <span className="font-bold text-lg text-white">{rating}</span>
-                        <FaStar className="text-yellow-400 h-4 w-4" />
+                    <div key={rating} className="group flex w-full items-center">
+                      <div className="flex w-20 items-center gap-1">
+                        <span className="text-lg font-bold text-white">{rating}</span>
+                        <FaStar className="h-4 w-4 text-yellow-400" />
                       </div>
-                      <div className="h-3 flex-1 rounded-full bg-white/5 border border-white/10 relative overflow-hidden">
+                      <div className="relative h-3 flex-1 overflow-hidden rounded-full border border-white/10 bg-white/5">
                         <div
-                          className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-yellow-500 to-yellow-300 transition-all duration-1000 group-hover:shadow-[0_0_10px_rgba(250,204,21,0.5)]"
+                          className="absolute left-0 top-0 h-full rounded-full bg-gradient-to-r from-yellow-500 to-yellow-300 transition-all duration-1000 group-hover:shadow-[0_0_10px_rgba(250,204,21,0.5)]"
                           style={{ width: `${percentage}%` }}
                         />
                       </div>
-                      <span className="font-medium text-gray-500 w-12 text-right">{rating * 10}%</span>
+                      <span className="w-12 text-right font-medium text-gray-500">{percentage}%</span>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            {/* Review Details Panel */}
             <div className="lg:col-span-7">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-8 h-full px-10 py-12 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-2xl">
-                <div className="flex flex-col items-center sm:items-start text-center sm:text-left">
-                  <div className="flex items-baseline gap-2 mb-2">
-                    <h3 className="font-black text-6xl md:text-7xl text-white tracking-tighter">4.3</h3>
-                    <span className="text-gray-400 text-xl font-medium">/ 5</span>
+              <div className="flex h-full flex-col items-center justify-between gap-8 rounded-3xl border border-white/10 bg-white/5 px-10 py-12 shadow-2xl backdrop-blur-xl sm:flex-row">
+                <div className="flex flex-col items-center text-center sm:items-start sm:text-left">
+                  <div className="mb-2 flex items-baseline gap-2">
+                    <h3 className="text-6xl font-black tracking-tighter text-white md:text-7xl">
+                      {ratingSummary.average.toFixed(1)}
+                    </h3>
+                    <span className="text-xl font-medium text-gray-400">/ 5</span>
                   </div>
-                  <div className="flex items-center gap-1 mb-3">
-                    {[...Array(5)].map((_, i) => (
-                      <FaStar key={i} className={`h-6 w-6 ${i < 4 ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)]' : 'text-gray-600'}`} />
+                  <div className="mb-3 flex items-center gap-1">
+                    {[...Array(5)].map((_, index) => (
+                      <FaStar
+                        key={index}
+                        className={`h-6 w-6 ${
+                          index < ratingSummary.rounded
+                            ? "text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.4)]"
+                            : "text-gray-600"
+                        }`}
+                      />
                     ))}
                   </div>
-                  <p className="font-medium text-gray-400">Based on 100+ Verified Ratings</p>
+                  <p className="font-medium text-gray-400">
+                    Based on {ratingSummary.total} marketplace reviews
+                  </p>
                 </div>
-                <div className="flex flex-col w-full sm:w-auto gap-4">
-                  <button className="w-full sm:w-48 rounded-xl px-6 py-4 bg-red-600 text-white font-bold hover:bg-red-500 transition-colors shadow-[0_0_20px_rgba(220,38,38,0.3)]">
+                <div className="flex w-full flex-col gap-4 sm:w-auto">
+                  <Link
+                    to="/productlist"
+                    className="w-full rounded-xl bg-red-600 px-6 py-4 text-center font-bold text-white transition-colors hover:bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.3)] sm:w-48"
+                  >
                     Write A Review
-                  </button>
-                  <button className="w-full sm:w-48 rounded-xl px-6 py-4 bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10 transition-colors">
+                  </Link>
+                  <Link
+                    to="/productlist"
+                    className="w-full rounded-xl border border-white/10 bg-white/5 px-6 py-4 text-center font-bold text-white transition-colors hover:bg-white/10 sm:w-48"
+                  >
                     See All Reviews
-                  </button>
+                  </Link>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </section>
+
+      {/* Recently Viewed */}
+      {recentlyViewed.length > 0 && (
+        <section className="bg-white dark:bg-gray-900 py-12 px-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Recently Viewed</h2>
+              <div className="flex gap-3">
+                <Link
+                  to="/compare"
+                  className="text-sm text-red-600 hover:underline font-medium"
+                >
+                  Compare Products →
+                </Link>
+                <button
+                  onClick={clearItems}
+                  className="text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              {recentlyViewed.map((p) => (
+                <Link
+                  key={p.productId}
+                  to={`/productdetail/${p.productId}`}
+                  className="bg-gray-50 dark:bg-gray-800 rounded-xl p-3 hover:shadow-md transition group"
+                >
+                  {p.imageUrl ? (
+                    <img
+                      src={p.imageUrl}
+                      alt={p.name}
+                      className="h-24 w-full object-contain rounded mb-2 bg-white dark:bg-gray-700"
+                    />
+                  ) : (
+                    <div className="h-24 w-full bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+                  )}
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200 line-clamp-2 group-hover:text-red-600">
+                    {p.name}
+                  </p>
+                  <p className="text-xs text-red-600 font-bold mt-1">Rs {p.price?.toLocaleString()}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       <Footer />
     </>

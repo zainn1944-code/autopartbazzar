@@ -62,6 +62,153 @@ const buildChartData = (labels, values, label, borderColor, backgroundColor) => 
   ],
 });
 
+function LiveSyncPanel() {
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [triggering, setTriggering] = useState(false);
+  const [pollTimer, setPollTimer] = useState(null);
+
+  const fetchStatus = async () => {
+    try {
+      const { data } = await axiosInstance.get("/admin/sync/status");
+      setSyncStatus(data);
+      return data;
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+  }, []);
+
+  const handleTrigger = async () => {
+    setTriggering(true);
+    setSyncStatus((prev) => ({ ...prev, status: "running", triggeredBy: "admin-manual" }));
+    try {
+      const { data } = await axiosInstance.post("/admin/sync/trigger");
+      setSyncStatus(data);
+    } catch (err) {
+      setSyncStatus((prev) => ({
+        ...prev,
+        status: "error",
+        errors: [err?.response?.data?.detail || "Trigger failed"],
+      }));
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  useEffect(() => {
+    if (syncStatus?.status === "running") {
+      const id = setTimeout(() => fetchStatus(), 3000);
+      setPollTimer(id);
+    } else if (pollTimer) {
+      clearTimeout(pollTimer);
+      setPollTimer(null);
+    }
+  }, [syncStatus?.status]);
+
+  const statusColor = {
+    idle: "text-gray-400",
+    running: "text-yellow-400",
+    completed: "text-green-400",
+    completed_with_errors: "text-orange-400",
+    skipped: "text-gray-500",
+    error: "text-red-400",
+  };
+
+  const statusBg = {
+    idle: "border-gray-700 bg-gray-800/40",
+    running: "border-yellow-500/30 bg-yellow-500/10",
+    completed: "border-green-500/30 bg-green-500/10",
+    completed_with_errors: "border-orange-500/30 bg-orange-500/10",
+    skipped: "border-gray-700 bg-gray-800/40",
+    error: "border-red-500/30 bg-red-500/10",
+  };
+
+  const status = syncStatus?.status || "idle";
+
+  return (
+    <div id="sync-panel" className="rounded-2xl border border-gray-800 bg-gray-900 p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-white">Live Parts Sync</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Roz raat 1 AM ko auto-fetch hoti hai</p>
+        </div>
+        <button
+          onClick={handleTrigger}
+          disabled={triggering || status === "running"}
+          className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {triggering || status === "running" ? "Syncing..." : "Trigger Now"}
+        </button>
+      </div>
+
+      <div className={`rounded-xl border p-4 ${statusBg[status] || statusBg.idle}`}>
+        <div className="flex items-center gap-2 mb-3">
+          {(status === "running") && (
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-yellow-400" />
+          )}
+          <span className={`text-sm font-semibold uppercase tracking-widest ${statusColor[status] || "text-gray-400"}`}>
+            {status.replace(/_/g, " ")}
+          </span>
+          {syncStatus?.syncedAt && (
+            <span className="ml-auto text-xs text-gray-500">
+              {new Date(syncStatus.syncedAt).toLocaleString()}
+            </span>
+          )}
+        </div>
+
+        {syncStatus && status !== "idle" && (
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            {[
+              { label: "Created", value: syncStatus.created ?? 0, color: "text-green-400" },
+              { label: "Updated", value: syncStatus.updated ?? 0, color: "text-blue-400" },
+              { label: "Skipped", value: syncStatus.skipped ?? 0, color: "text-gray-400" },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-lg bg-black/20 px-3 py-2 text-center">
+                <p className={`text-lg font-bold ${stat.color}`}>{stat.value}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-widest">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {syncStatus?.feeds?.length > 0 && (
+          <div className="space-y-1.5">
+            {syncStatus.feeds.map((feed, i) => (
+              <div key={i} className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-2 text-xs">
+                <span className="text-gray-300 font-medium truncate max-w-[60%]">{feed.name}</span>
+                <div className="flex gap-2 text-gray-500 shrink-0">
+                  <span className="text-green-400">+{feed.created}</span>
+                  <span className="text-blue-400">~{feed.updated}</span>
+                  {feed.error && <span className="text-red-400">ERR</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {syncStatus?.errors?.length > 0 && (
+          <div className="mt-3 space-y-1">
+            {syncStatus.errors.map((err, i) => (
+              <p key={i} className="text-xs text-red-400">{err}</p>
+            ))}
+          </div>
+        )}
+
+        {(!syncStatus || status === "idle") && (
+          <p className="text-xs text-gray-500">Abhi tak koi sync nahi hua. "Trigger Now" dabao.</p>
+        )}
+      </div>
+
+      <p className="mt-3 text-[11px] text-gray-600">
+        Scheduled: Daily at 01:00 AM &bull; Feed: dummyjson.com/products/category/automotive
+      </p>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -204,6 +351,39 @@ export default function AdminDashboard() {
                 Update product
               </Link>
             </li>
+            <li>
+              <Link
+                to="/admin/bulk-upload"
+                className="block rounded-lg px-4 py-3 text-gray-300 transition-colors hover:bg-black hover:text-red-500"
+              >
+                Bulk Upload (CSV)
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/admin/orders"
+                className="block rounded-lg px-4 py-3 text-gray-300 transition-colors hover:bg-black hover:text-red-500"
+              >
+                Manage Orders
+              </Link>
+            </li>
+            <li>
+              <Link
+                to="/admin/users"
+                className="block rounded-lg px-4 py-3 text-gray-300 transition-colors hover:bg-black hover:text-red-500"
+              >
+                Manage Users
+              </Link>
+            </li>
+            <li>
+              <a
+                href="#sync"
+                className="block rounded-lg px-4 py-3 text-gray-300 transition-colors hover:bg-black hover:text-red-500"
+                onClick={() => document.getElementById("sync-panel")?.scrollIntoView({ behavior: "smooth" })}
+              >
+                Live Parts Sync
+              </a>
+            </li>
           </ul>
         </nav>
       </aside>
@@ -252,6 +432,8 @@ export default function AdminDashboard() {
               <Line data={cityChartData} options={chartOptions} />
             </div>
           </div>
+
+          <LiveSyncPanel />
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
             <div className="rounded-2xl border border-gray-800 bg-gray-900">
