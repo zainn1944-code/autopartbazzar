@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
-import { useAuth } from "@/context/AuthContext.jsx";
+import { useAuth } from "@/hooks/useAuth";
 import Navbar from "@/components/ui/navbar.jsx";
 
 const CSV_TEMPLATE = `name,price,category,make,city,sale,free_shipping,stock_quantity,original_price,description

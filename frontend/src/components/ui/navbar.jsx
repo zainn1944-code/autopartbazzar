@@ -5,7 +5,7 @@ import {
 } from "@headlessui/react";
 import { ShoppingCartIcon, Bars3Icon, XMarkIcon, SunIcon, MoonIcon } from "@heroicons/react/24/outline";
 import { Link } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext.jsx";
+import { useAuth } from "@/hooks/useAuth";
 import { useCart } from "@/context/CartContext.jsx";
 import { useTheme } from "@/context/ThemeContext.jsx";
 

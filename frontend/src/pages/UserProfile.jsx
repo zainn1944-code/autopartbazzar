@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
-import { useAuth } from "@/context/AuthContext.jsx";
+import { useAuth } from "@/hooks/useAuth";
 import Navbar from "@/components/ui/navbar.jsx";
 
 export default function UserProfile() {
