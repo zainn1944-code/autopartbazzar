@@ -13,9 +13,10 @@ class ShippingAddress(BaseModel):
 
 
 class OrderItemCreate(BaseModel):
-    product: str | int
+    product: str | int | None = None
     quantity: int = Field(ge=1)
     price: float
+    snapshot: dict | None = None
 
 
 class OrderCreate(BaseModel):

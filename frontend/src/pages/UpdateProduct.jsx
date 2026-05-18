@@ -204,6 +204,42 @@ const UpdateProductPage = () => {
               />
             </div>
 
+            <div>
+              <label className="block mb-2 text-lg font-medium">Model URL</label>
+              <input
+                type="text"
+                name="modelUrl"
+                value={product.modelUrl || ""}
+                onChange={handleChange}
+                className="w-full p-2 bg-transparent border border-gray-500 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder="/models/brand/car.glb"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2 text-lg font-medium">Source Name</label>
+              <input
+                type="text"
+                name="sourceName"
+                value={product.sourceName || ""}
+                onChange={handleChange}
+                className="w-full p-2 bg-transparent border border-gray-500 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder="e.g. eBay"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2 text-lg font-medium">Source URL</label>
+              <input
+                type="url"
+                name="sourceUrl"
+                value={product.sourceUrl || ""}
+                onChange={handleChange}
+                className="w-full p-2 bg-transparent border border-gray-500 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+                placeholder="https://example.com/listing"
+              />
+            </div>
+
             <div className="flex items-center gap-4">
               <label className="flex items-center">
                 <input

@@ -9,6 +9,9 @@ const AddProductForm = () => {
     category: "",
     make: "",
     city: "",
+    modelUrl: "",
+    sourceName: "",
+    sourceUrl: "",
     sale: false,
     freeShipping: false,
     image: null,
@@ -87,6 +90,9 @@ const AddProductForm = () => {
         category: "",
         make: "",
         city: "",
+        modelUrl: "",
+        sourceName: "",
+        sourceUrl: "",
         sale: false,
         freeShipping: false,
         image: null,
@@ -217,7 +223,50 @@ const AddProductForm = () => {
             <option value="Honda" className="text-black">Honda</option>
             <option value="Toyota" className="text-black">Toyota</option>
             <option value="BMW" className="text-black">BMW</option>
+            <option value="Lamborghini" className="text-black">Lamborghini</option>
           </select>
+        </div>
+
+        <div>
+          <label className="block mb-2 text-lg font-medium text-gradient">
+            Model URL (Optional)
+          </label>
+          <input
+            type="text"
+            name="modelUrl"
+            value={product.modelUrl}
+            onChange={handleChange}
+            className="w-full p-2 bg-transparent border border-gray-500 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+            placeholder="/models/brand/car.glb"
+          />
+        </div>
+
+        <div>
+          <label className="block mb-2 text-lg font-medium text-gradient">
+            Source Name (Optional)
+          </label>
+          <input
+            type="text"
+            name="sourceName"
+            value={product.sourceName}
+            onChange={handleChange}
+            className="w-full p-2 bg-transparent border border-gray-500 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+            placeholder="e.g. eBay"
+          />
+        </div>
+
+        <div>
+          <label className="block mb-2 text-lg font-medium text-gradient">
+            Source URL (Optional)
+          </label>
+          <input
+            type="url"
+            name="sourceUrl"
+            value={product.sourceUrl}
+            onChange={handleChange}
+            className="w-full p-2 bg-transparent border border-gray-500 rounded text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500"
+            placeholder="https://example.com/listing"
+          />
         </div>
 
         <div>

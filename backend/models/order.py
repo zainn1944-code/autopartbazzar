@@ -28,9 +28,10 @@ class OrderItem(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True)
     quantity: Mapped[int] = mapped_column(Integer)
     price: Mapped[float] = mapped_column()
+    snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     order: Mapped["Order"] = relationship("Order", back_populates="items")
-    product: Mapped["Product"] = relationship("Product", back_populates="order_items")
+    product: Mapped["Product | None"] = relationship("Product", back_populates="order_items")

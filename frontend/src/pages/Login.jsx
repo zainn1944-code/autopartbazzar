@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,28 +12,27 @@ export default function Login() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (email === "AutoPartBazaar21@gmail.com") {
-      navigate("/admindashboard");
-      return;
-    }
-
     try {
-      await login(email, password);
-      navigate("/home", { replace: true });
+      const nextUser = await login(email, password);
+      const nextPath =
+        location.state?.from ||
+        (nextUser?.role === "admin" ? "/admindashboard" : "/home");
+      navigate(nextPath, { replace: true });
     } catch {
       setError("Invalid Credentials");
     }
   };
 
   return (
-    <main className="bg-black h-screen flex items-center justify-center p-10">
-      <div className="grid w-full h-full grid-cols-1 bg-white box-anim md:grid-cols-2">
-        <div className="bg-black text-white flex items-center justify-center flex-col">
+    <main className="bg-gray-100 dark:bg-black h-screen flex items-center justify-center p-10">
+      <div className="grid w-full h-full grid-cols-1 bg-white dark:bg-gray-900 box-anim md:grid-cols-2">
+        <div className="bg-white dark:bg-black text-gray-900 dark:text-white flex items-center justify-center flex-col">
           <div className="my-4">
             <h1 className="text-3xl font-semibold">Login</h1>
             <p className="mt-2 text-xs text-slate-400">

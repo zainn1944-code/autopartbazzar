@@ -1,58 +1,38 @@
-// "use client";
-
-// import React from "react";
-// import ProductCard from '@/components/ui/ListProductCard'; // Correct the import to match the component name
-
-// const ProductGrid = ({ products, viewMode }) => {
-//   return (
-//     <div
-//       className={`grid gap-6 ${
-//         viewMode === "grid"
-//           ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-//           : "grid-cols-1"
-//       }`}
-//     >
-//       {products.map((product) => (
-//         <ProductCard
-//           key={product.productId} // Corrected key to `productId`
-//           product={product} // Passing entire product object
-//           viewMode={viewMode}
-//         />
-//       ))}
-//     </div>
-//   );
-// };
-
-// export default ProductGrid;
 "use client";
 
 import React from "react";
-import ProductCard from '@/components/ui/ListProductCard'; // ✅ Corrected import path
+import ProductCard from "@/components/ui/ListProductCard";
 
 const ProductGrid = ({
   products,
   viewMode,
   emptyMessage = "No products match the current filters.",
+  isSearching = false,
 }) => {
-  if (products.length === 0) {
+  if (products.length === 0 && !isSearching) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-700 bg-gray-900/60 px-6 py-12 text-center text-gray-300">
-        {emptyMessage}
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-16 text-center">
+        <svg className="mb-4 w-10 h-10 text-gray-600" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+        </svg>
+        <p className="text-sm font-medium text-gray-500">{emptyMessage}</p>
       </div>
     );
   }
 
   return (
-    <div
-      className={`grid gap-6 ${
-        viewMode === "grid"
-          ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-          : "grid-cols-1"
-      }`}
-    >
-      {products.map((product) => (
-        <ProductCard key={product.productId} product={product} viewMode={viewMode} />
-      ))}
+    <div className={`transition-opacity duration-200 ${isSearching ? "opacity-50 pointer-events-none" : "opacity-100"}`}>
+      <div
+        className={`grid gap-5 ${
+          viewMode === "grid"
+            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+            : "grid-cols-1"
+        }`}
+      >
+        {products.map((product) => (
+          <ProductCard key={product.productId} product={product} viewMode={viewMode} />
+        ))}
+      </div>
     </div>
   );
 };

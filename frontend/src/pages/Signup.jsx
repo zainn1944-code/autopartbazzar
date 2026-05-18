@@ -73,9 +73,9 @@ export default function Signup() {
   const toggleRePasswordVisibility = () => setShowRePassword((prev) => !prev);
 
   return (
-    <main className="bg-black h-screen flex items-center justify-center p-10">
-      <div className="grid w-full h-full grid-cols-1 bg-black box-anim md:grid-cols-2">
-        <div className="bg-black text-white flex items-center justify-center flex-col mr-20">
+    <main className="bg-gray-100 dark:bg-black h-screen flex items-center justify-center p-10">
+      <div className="grid w-full h-full grid-cols-1 bg-white dark:bg-black box-anim md:grid-cols-2">
+        <div className="bg-white dark:bg-black text-gray-900 dark:text-white flex items-center justify-center flex-col mr-20">
           <div className="my-4">
             <h1 className="text-3xl font-semibold">Sign Up</h1>
             <p className="mt-2 text-xs text-slate-400">Register yourself for an amazing experience!</p>

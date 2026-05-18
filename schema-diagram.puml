@@ -1,0 +1,117 @@
+@startuml
+title AutoPart Bazaar - Database Schema Diagram
+hide circle
+hide methods
+skinparam shadowing false
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+
+entity "USERS" as users {
+  * id : int <<PK>>
+  --
+  email : varchar(255) <<UK>>
+  phone : varchar(64) <<UK>>
+  password_hash : varchar(255)
+  name : varchar(255) <<nullable>>
+  is_banned : boolean
+}
+
+entity "PRODUCTS" as products {
+  * id : int <<PK>>
+  --
+  product_id : varchar(64) <<UK>>
+  name : varchar(512)
+  description : text <<nullable>>
+  price : float
+  original_price : float <<nullable>>
+  category : varchar(255)
+  make : varchar(255) <<nullable>>
+  city : varchar(255) <<nullable>>
+  sale : boolean
+  free_shipping : boolean
+  stock_quantity : int
+  image_url : text <<nullable>>
+  model_url : text <<nullable>>
+  source_name : varchar(255) <<nullable>>
+  source_url : text <<nullable>>
+  external_id : varchar(255) <<nullable>>
+  is_live_listing : boolean
+  last_synced_at : datetime <<nullable>>
+}
+
+entity "ORDERS" as orders {
+  * id : int <<PK>>
+  --
+  user_id : int <<FK>>
+  total_amount : float
+  status : varchar(32)
+  payment_status : varchar(32)
+  shipping_address : json
+  order_date : datetime
+}
+
+entity "ORDER_ITEMS" as order_items {
+  * id : int <<PK>>
+  --
+  order_id : int <<FK>>
+  product_id : int <<FK, nullable>>
+  quantity : int
+  price : float
+  snapshot : json <<nullable>>
+}
+
+entity "REVIEWS" as reviews {
+  * id : int <<PK>>
+  --
+  product_id : varchar(64)
+  text : text
+  rating : float
+}
+
+entity "CAR_MODELS" as car_models {
+  * id : int <<PK>>
+  --
+  make : varchar(255)
+  car : varchar(255)
+  model : float
+  model_url : text
+}
+
+entity "PASSWORD_OTPS" as password_otps {
+  * id : int <<PK>>
+  --
+  email : varchar(255) <<UK>>
+  otp_hash : text
+  expiry_ms : bigint
+}
+
+entity "WISHLISTS" as wishlists {
+  * id : int <<PK>>
+  --
+  user_id : int <<FK>>
+  product_id : int <<FK>>
+  uq_user_product : unique(user_id, product_id)
+}
+
+users ||--o{ orders : places
+orders ||--|{ order_items : contains
+products ||--o{ order_items : included_in
+users ||--o{ wishlists : owns
+products ||--o{ wishlists : saved_as
+users ||--o| password_otps : reset_for_email
+products ||--o{ reviews : referenced_by_product_id
+
+note right of reviews
+  reviews.product_id maps to
+  products.product_id logically.
+  It is not defined as a DB FK.
+end note
+
+note bottom of order_items
+  order_id uses ON DELETE CASCADE.
+  product_id is nullable so snapshot
+  can preserve item details even if
+  the product reference changes later.
+end note
+
+@enduml

@@ -8,6 +8,25 @@ from models.car_model import CarModel
 router = APIRouter(prefix="/getCarModel", tags=["car-models"])
 
 
+@router.get("/catalog")
+async def list_car_catalog(db: AsyncSession = Depends(get_db)):
+    rows = (
+        await db.execute(select(CarModel).order_by(CarModel.make.asc(), CarModel.car.asc(), CarModel.model.desc()))
+    ).scalars().all()
+    return {
+        "cars": [
+            {
+                "id": row.id,
+                "make": row.make,
+                "car": row.car,
+                "model": row.model,
+                "modelUrl": row.model_url,
+            }
+            for row in rows
+        ]
+    }
+
+
 @router.get("")
 async def get_car_model(
     db: AsyncSession = Depends(get_db),

@@ -1,0 +1,70 @@
+@startuml
+title AutoPart Bazaar - System Architecture Diagram
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+
+actor "Guest" as Guest
+actor "Customer" as Customer
+actor "Admin" as Admin
+
+node "Client Layer" as Client {
+  package "Frontend: React + Vite" as FE {
+    component "App.jsx Routes" as App
+    component "Pages and UI Components" as UI
+    component "AuthContext\nJWT state + silent refresh" as Auth
+    component "CartContext\nlocalStorage cart state" as Cart
+    component "axiosInstance\nBearer token + 401 retry" as Axios
+    folder "frontend/public\nGLB, images, audio" as Assets
+    database "Browser localStorage\naccess_token, cart" as BrowserStore
+  }
+}
+
+node "Application Layer" as Server {
+  package "Backend: FastAPI" as BE {
+    component "main.py\nCORS, rate limiting,\nmedia mount, lifespan" as Main
+    component "Routers\nauth, users, products, orders,\nreviews, wishlists, car_models,\ncar_ai, password_reset, admin_sync" as Routers
+    component "dependencies.py\ncurrent user and admin guards" as Guards
+    component "Core Services\njwt_tokens, password,\nemail_service, s3_upload" as Core
+    component "parts_sync service\nmanual trigger + scheduler" as Sync
+    folder "backend/static/product-images" as Media
+  }
+}
+
+database "PostgreSQL\nSQLAlchemy async models" as DB
+
+cloud "AWS S3\noptional product image storage" as S3
+cloud "SMTP Server\nOTP and order emails" as SMTP
+cloud "OpenRouter Gemma API\ncar recommendation responses" as AI
+cloud "Remote Parts Feeds\nJSON, HTML, marketplace listings" as Feed
+
+Guest --> UI : browse and authenticate
+Customer --> UI : shop, checkout, garage
+Admin --> UI : manage catalog and orders
+
+UI --> App
+App --> Auth
+App --> Cart
+UI --> Axios
+UI --> Assets
+Auth --> BrowserStore
+Cart --> BrowserStore
+
+Axios --> Main : HTTPS API requests
+Main --> Routers
+Routers --> Guards
+Routers --> DB
+Routers --> Core
+Routers --> Sync
+Main --> Sync
+Main --> Media : serve /media
+
+Core --> S3 : upload images
+Core --> SMTP : send OTP / order mail
+Routers --> AI : AI recommendation request
+Sync --> Feed : fetch live listings
+Sync --> DB : upsert synced products
+
+@enduml

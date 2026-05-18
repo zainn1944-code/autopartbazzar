@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
 import { useCart } from "@/context/CartContext.jsx";
+import { useRecentlyViewed } from "@/hooks/useRecentlyViewed.js";
 import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
 import ProductVisual from "@/components/ui/ProductVisual";
@@ -9,6 +10,7 @@ import ProductVisual from "@/components/ui/ProductVisual";
 const ProductDetail = () => {
   const { id } = useParams();
   const { addToCart } = useCart();
+  const { addItem: addRecentlyViewed } = useRecentlyViewed();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,6 +24,9 @@ const ProductDetail = () => {
   const descriptionText =
     product?.description ||
     `${product?.category || "Auto part"}${product?.make ? ` for ${product.make}` : ""}. Built for performance and reliability.`;
+  const liveSyncText = product?.lastSyncedAt
+    ? new Date(product.lastSyncedAt).toLocaleString()
+    : null;
 
   useEffect(() => {
     if (!id) return;
@@ -31,6 +36,7 @@ const ProductDetail = () => {
         const { data } = await axiosInstance.get(`/products/${id}`);
         setProduct(data);
         setSelectedImage(data.imageUrl);
+        addRecentlyViewed(data);
       } catch (requestError) {
         setError(requestError.response?.data?.detail || "Product not found");
       } finally {
@@ -128,7 +134,7 @@ const ProductDetail = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a] flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500"></div>
       </div>
     );
@@ -136,7 +142,7 @@ const ProductDetail = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white">
+      <div className="min-h-screen bg-gray-100 dark:bg-[#0a0a0a] flex flex-col items-center justify-center text-white">
         <Navbar />
         <div className="flex-1 flex items-center justify-center">
           <div className="bg-red-500/10 border border-red-500/20 p-8 rounded-2xl backdrop-blur-xl">
@@ -153,7 +159,7 @@ const ProductDetail = () => {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen bg-[#050505] text-white selection:bg-red-500/30">
+      <div className="min-h-screen bg-gray-50 dark:bg-[#050505] text-gray-900 dark:text-white selection:bg-red-500/30">
         <div className="mx-auto w-full max-w-7xl px-4 py-12 lg:py-20">
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16 items-center">
             {/* Visuals Left Pane */}
@@ -205,10 +211,10 @@ const ProductDetail = () => {
               </div>
 
               <div className="mb-8 flex items-end gap-3">
-                <span className="text-4xl font-bold text-white">Rs {product.price}</span>
+                <span className="text-4xl font-bold text-white">Rs {Number(product.price).toLocaleString()}</span>
                 {product.originalPrice > 0 && (
                   <span className="text-xl text-gray-500 line-through mb-1">
-                    Rs {product.originalPrice}
+                    Rs {Number(product.originalPrice).toLocaleString()}
                   </span>
                 )}
               </div>
@@ -216,6 +222,38 @@ const ProductDetail = () => {
               <p className="text-lg leading-relaxed text-gray-400 mb-10 border-l-2 border-white/10 pl-4">
                 {descriptionText}
               </p>
+
+              {(product.sourceName || product.sourceUrl || product.isLiveListing) && (
+                <div className="mb-8 rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {product.sourceName && (
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-emerald-400">
+                        {product.sourceName}
+                      </span>
+                    )}
+                    {product.isLiveListing && (
+                      <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-red-400">
+                        Live Synced
+                      </span>
+                    )}
+                  </div>
+                  {liveSyncText && (
+                    <p className="mt-3 text-sm text-gray-400">
+                      Last synced: {liveSyncText}
+                    </p>
+                  )}
+                  {product.sourceUrl && (
+                    <a
+                      href={product.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 inline-flex rounded-xl border border-white/10 bg-transparent px-4 py-2 text-sm font-semibold text-gray-200 transition-colors hover:bg-white/5 hover:text-white"
+                    >
+                      Open Original Listing
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* Purchase Controls */}
               <div className="bg-white/5 border border-white/10 rounded-2xl p-6 backdrop-blur-xl">
