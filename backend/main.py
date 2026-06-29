@@ -11,7 +11,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from config import get_settings
-from routers import admin_sync, auth, car_ai, car_models, orders, password_reset, products, reviews, users, wishlists
+from routers import admin_sync, auth, car_ai, car_models, orders, password_reset, payments, products, reviews, saved_builds, users, wishlists
 from services.parts_sync import start_scheduler, stop_scheduler
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
@@ -33,7 +33,7 @@ _localhost_origins = [f"http://localhost:{p}" for p in range(5170, 5180)] + \
 origins = list(set(origins + _localhost_origins))
 
 app = FastAPI(
-    title="AutoPart Bazaar API",
+    title="Auto Part Bazar API",
     version="1.0.0",
     lifespan=lifespan,
     description="Industry-grade auto-parts marketplace API with JWT auth, rate limiting, and 3D car configurator.",
@@ -65,10 +65,12 @@ app.include_router(car_ai.router)
 app.include_router(admin_sync.router)
 app.include_router(products.router)
 app.include_router(orders.router)
+app.include_router(payments.router)
 app.include_router(reviews.router)
 app.include_router(car_models.router)
 app.include_router(password_reset.router)
 app.include_router(wishlists.router)
+app.include_router(saved_builds.router)
 
 
 @app.get("/health", tags=["health"])

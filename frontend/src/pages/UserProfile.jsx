@@ -57,7 +57,7 @@ export default function UserProfile() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
               <input
-                value={user?.email || ""}
+                value="autopart@gmail.com"
                 disabled
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed"
               />

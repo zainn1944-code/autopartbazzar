@@ -1,0 +1,199 @@
+@startgantt
+title AutoPart Bazaar - Project Timeline (February 2026 - May 2026)
+
+' ===== Calendar Configuration =====
+printscale weekly
+Project starts the 1st of february 2026
+
+' Mark weekends as closed days
+saturday are closed
+sunday are closed
+
+' ===== Color Definitions =====
+<style>
+ganttDiagram {
+  task {
+    FontColor white
+    FontStyle bold
+    BackGroundColor #2E86AB
+    LineColor #1B4965
+  }
+  milestone {
+    BackGroundColor #E63946
+    LineColor #9D0208
+    FontColor #9D0208
+    FontStyle bold
+  }
+  separator {
+    BackGroundColor #F1FAEE
+    FontColor #1D3557
+    FontStyle bold
+  }
+  timeline {
+    BackGroundColor #A8DADC
+    FontColor #1D3557
+  }
+}
+</style>
+
+' ============================================================
+' PHASE 1: PLANNING AND ANALYSIS (FEBRUARY 2026)
+' ============================================================
+-- Phase 1: Planning and Analysis --
+
+[Requirement Gathering] as [REQ] lasts 7 days
+[REQ] starts 2026-02-01
+
+[Feasibility Study] as [FEAS] lasts 5 days
+[FEAS] starts at [REQ]'s end
+
+[Tech Stack Selection] as [TECH] lasts 4 days
+[TECH] starts at [FEAS]'s end
+
+[Project Setup and Git Repo] as [SETUP] lasts 5 days
+[SETUP] starts at [TECH]'s end
+
+[M1: Requirements Frozen] happens at [SETUP]'s end
+
+' ============================================================
+' PHASE 2: SYSTEM DESIGN (LATE FEBRUARY - EARLY MARCH)
+' ============================================================
+-- Phase 2: System Design --
+
+[DFD Level 0 and Level 1 Diagrams] as [DFD] lasts 5 days
+[DFD] starts at [SETUP]'s end
+
+[UML Class and Activity Diagrams] as [UML] lasts 5 days
+[UML] starts at [DFD]'s end
+
+[Database Schema Design] as [DBSCHEMA] lasts 4 days
+[DBSCHEMA] starts at [UML]'s end
+
+[M2: Design Complete] happens at [DBSCHEMA]'s end
+
+' ============================================================
+' PHASE 3: BACKEND DEVELOPMENT (MARCH 2026)
+' ============================================================
+-- Phase 3: Backend Development --
+
+[FastAPI Project Setup] as [FAPI] lasts 3 days
+[FAPI] starts at [DBSCHEMA]'s end
+
+[SQLAlchemy Models and Alembic Migrations] as [MODELS] lasts 5 days
+[MODELS] starts at [FAPI]'s end
+
+[JWT Authentication - Login Signup Refresh] as [AUTH] lasts 5 days
+[AUTH] starts at [MODELS]'s end
+
+[Product and Order REST APIs] as [PRODAPI] lasts 6 days
+[PRODAPI] starts at [AUTH]'s end
+
+[Cart Wishlist and Reviews APIs] as [CARTAPI] lasts 5 days
+[CARTAPI] starts at [PRODAPI]'s end
+
+[Admin and Seller Endpoints] as [ADMINAPI] lasts 4 days
+[ADMINAPI] starts at [CARTAPI]'s end
+
+[M3: Backend MVP Ready] happens at [ADMINAPI]'s end
+
+' ============================================================
+' PHASE 4: FRONTEND DEVELOPMENT (APRIL 2026)
+' ============================================================
+-- Phase 4: Frontend Development --
+
+[React Vite Setup and Routing] as [REACT] lasts 3 days
+[REACT] starts at [ADMINAPI]'s end
+
+[Auth Context and Login Pages] as [AUTHUI] lasts 4 days
+[AUTHUI] starts at [REACT]'s end
+
+[Home Product List and Detail Pages] as [PRODUI] lasts 5 days
+[PRODUI] starts at [AUTHUI]'s end
+
+[Cart and Checkout Pages] as [CARTUI] lasts 5 days
+[CARTUI] starts at [PRODUI]'s end
+
+[3D Car Garage with Three.js] as [GARAGE] lasts 6 days
+[GARAGE] starts at [CARTUI]'s end
+
+[Admin Dashboard UI] as [ADMINUI] lasts 5 days
+[ADMINUI] starts at [GARAGE]'s end
+
+[M4: Frontend MVP Complete] happens at [ADMINUI]'s end
+
+' ============================================================
+' PHASE 5: INTEGRATION AND AI MODULE (EARLY MAY 2026)
+' ============================================================
+-- Phase 5: Integration and AI Module --
+
+[AI Recommendation Engine - OpenRouter] as [AI] lasts 5 days
+[AI] starts at [ADMINUI]'s end
+
+[Parts Sync Service from Remote Feeds] as [SYNC] lasts 4 days
+[SYNC] starts at [AI]'s end
+
+[Email Service SMTP and OTP] as [EMAIL] lasts 3 days
+[EMAIL] starts at [SYNC]'s end
+
+[AWS S3 Image Upload Integration] as [S3] lasts 2 days
+[S3] starts at [EMAIL]'s end
+
+[M5: AI Integration Complete] happens at [S3]'s end
+
+' ============================================================
+' PHASE 6: TESTING AND DEPLOYMENT (LATE MAY 2026)
+' ============================================================
+-- Phase 6: Testing and Deployment --
+
+[Unit and Integration Testing] as [TEST] lasts 5 days
+[TEST] starts at [S3]'s end
+
+[Bug Fixes and UI Polish] as [BUGFIX] lasts 4 days
+[BUGFIX] starts at [TEST]'s end
+
+[Documentation and Deployment] as [DEPLOY] lasts 5 days
+[DEPLOY] starts at [BUGFIX]'s end
+
+[M6: Production Ready] happens at [DEPLOY]'s end
+
+' ============================================================
+' COLOR OVERRIDES PER PHASE (Different color for each phase)
+' ============================================================
+[REQ] is colored in #457B9D/#1D3557
+[FEAS] is colored in #457B9D/#1D3557
+[TECH] is colored in #457B9D/#1D3557
+[SETUP] is colored in #457B9D/#1D3557
+
+[DFD] is colored in #2A9D8F/#264653
+[UML] is colored in #2A9D8F/#264653
+[DBSCHEMA] is colored in #2A9D8F/#264653
+
+[FAPI] is colored in #E76F51/#A4161A
+[MODELS] is colored in #E76F51/#A4161A
+[AUTH] is colored in #E76F51/#A4161A
+[PRODAPI] is colored in #E76F51/#A4161A
+[CARTAPI] is colored in #E76F51/#A4161A
+[ADMINAPI] is colored in #E76F51/#A4161A
+
+[REACT] is colored in #F4A261/#D4A017
+[AUTHUI] is colored in #F4A261/#D4A017
+[PRODUI] is colored in #F4A261/#D4A017
+[CARTUI] is colored in #F4A261/#D4A017
+[GARAGE] is colored in #F4A261/#D4A017
+[ADMINUI] is colored in #F4A261/#D4A017
+
+[AI] is colored in #6A4C93/#3C096C
+[SYNC] is colored in #6A4C93/#3C096C
+[EMAIL] is colored in #6A4C93/#3C096C
+[S3] is colored in #6A4C93/#3C096C
+
+[TEST] is colored in #06A77D/#005377
+[BUGFIX] is colored in #06A77D/#005377
+[DEPLOY] is colored in #06A77D/#005377
+
+' ============================================================
+' FOOTER LEGEND
+' ============================================================
+caption AutoPart Bazaar Project Schedule | 4 Months | 6 Phases | Feb 01 - May 31, 2026
+
+@endgantt

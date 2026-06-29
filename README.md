@@ -1,45 +1,57 @@
-# AutoPart Bazaar
+# Auto Part Bazaar
 
-AutoPart Bazaar is a full-stack auto-parts marketplace and car-visualization project.
+Auto Part Bazaar is a full-stack auto-parts marketplace with AI-powered car customization, 3D model visualization, and integrated payment flow.
 
-The active app in this repository is:
+## Active Application
 
-- `frontend/`: React + Vite frontend
-- `backend/`: FastAPI + SQLAlchemy backend
-- `scripts/`: local setup and seed helpers
-
-The old duplicate Next.js app has been removed. The Vite frontend and FastAPI backend are the only active runtime targets.
+- `frontend/` — React + Vite frontend
+- `backend/` — FastAPI + SQLAlchemy backend
+- `scripts/` — local setup and seed helpers
 
 ## Features
 
-- User signup and login with JWT-based auth
-- Product listing and product detail pages
-- Cart and checkout flow
-- 3D car garage/model viewer using GLB assets
-- Admin product management endpoints
+- User signup and login with JWT-based auth and OTP email verification
+- Product listing, detail pages, cart, and checkout
+- 3D car garage and model viewer (Honda Civic, Toyota Corolla, Toyota Hilux)
+- AI car modification panel — recommend parts and customize cars visually
+- Saved car builds per user (up to 25 per account)
+- JazzCash payment integration with mock payment fallback
+- Admin dashboard: product management, order management, user management
+- Bulk product upload (CSV)
 - Seed scripts for cars and products
 
 ## Tech Stack
 
-- Frontend: React, Vite, React Router, Tailwind CSS, Three.js
-- Backend: FastAPI, SQLAlchemy async, PostgreSQL
-- Auth: JWT
-- 3D models: GLB assets served from `frontend/public`
+- **Frontend:** React, Vite, React Router, Tailwind CSS, Three.js
+- **Backend:** FastAPI, SQLAlchemy async, PostgreSQL, Alembic
+- **Auth:** JWT + OTP (email)
+- **Payments:** JazzCash (+ mock payment for local dev)
+- **3D models:** GLB assets served from `frontend/public`
 
 ## Project Structure
 
 ```text
 zainproject/
-|-- backend/
-|-- frontend/
-|-- scripts/
-|-- package.json
-`-- README.md
+├── backend/
+│   ├── alembic/versions/     # DB migrations (001-011)
+│   ├── models/               # SQLAlchemy models
+│   ├── routers/              # FastAPI route handlers
+│   ├── schemas/              # Pydantic schemas
+│   └── services/             # Business logic
+├── frontend/
+│   ├── public/models/        # GLB 3D car models
+│   └── src/
+│       ├── components/
+│       ├── context/
+│       ├── hooks/
+│       └── pages/
+├── scripts/                  # Seed helpers
+└── README.md
 ```
 
 ## Quick Start
 
-Run this from the project root:
+Run from the project root:
 
 ```powershell
 npm.cmd run setup
@@ -48,46 +60,23 @@ npm.cmd run setup
 This will:
 
 - create `backend/autopart_venv` if needed
-- install backend dependencies
-- install frontend dependencies
+- install backend and frontend dependencies
 - create `backend/.env` from `backend/.env.example` if missing
 
-Before starting the app, do these required backend steps:
-
-1. Set `DATABASE_URL` in `backend/.env` to a running PostgreSQL database.
-2. Run Alembic migrations:
+Then set `DATABASE_URL` in `backend/.env` and run migrations:
 
 ```powershell
 npm.cmd run migrate:backend
 ```
 
-Optional local-dev services:
-
-- Leave `AWS_*` blank to store uploaded product images locally under the backend `media` route.
-- Set `EMAIL_USER` / `EMAIL_PASS` if you want password-reset OTP emails to work.
-
 ## Run the App
 
-Start the backend:
-
 ```powershell
-npm.cmd run dev:backend
+npm.cmd run dev:backend    # FastAPI on http://127.0.0.1:8000
+npm.cmd run dev:frontend   # Vite on http://localhost:5173
 ```
-
-Start the frontend:
-
-```powershell
-npm.cmd run dev:frontend
-```
-
-Default local URLs:
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://127.0.0.1:8000`
 
 ## Manual Setup
-
-If you want to do setup manually:
 
 ```powershell
 python -m venv backend\autopart_venv
@@ -97,7 +86,7 @@ Copy-Item backend\.env.example backend\.env
 npm.cmd --prefix frontend install
 ```
 
-Apply database migrations after `backend/.env` points at PostgreSQL:
+Apply migrations after `backend/.env` points at PostgreSQL:
 
 ```powershell
 Set-Location backend
@@ -108,35 +97,23 @@ Set-Location ..
 Manual run commands:
 
 ```powershell
-cd backend
-.\autopart_venv\Scripts\python.exe -m uvicorn main:app --reload
+cd backend && .\autopart_venv\Scripts\python.exe -m uvicorn main:app --reload
+cd frontend && npm.cmd run dev
 ```
 
-```powershell
-cd frontend
-npm.cmd run dev
-```
+## Environment Variables
 
-## Environment
+Copy `backend/.env.example` to `backend/.env` and fill in:
 
-Update `backend/.env` before using the app with real services.
-
-Main backend settings include:
-
-- `database_url`
-- `secret_key`
-- `aws_region`
-- `aws_access_key_id`
-- `aws_secret_access_key`
-- `aws_bucket_name`
-- `email_user`
-- `email_pass`
-- `cors_origins`
-
-Behavior when optional services are not configured:
-
-- Product image uploads fall back to local storage served from `http://127.0.0.1:8000/media/...`
-- Password reset email endpoints return a clear `503` until SMTP credentials are configured
+| Variable | Required | Purpose |
+|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SECRET_KEY` | Yes | JWT signing key |
+| `FRONTEND_BASE_URL` | Yes | Used for payment redirects |
+| `AWS_REGION` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_BUCKET_NAME` | No | S3 image uploads (falls back to local `/media`) |
+| `EMAIL_USER` / `EMAIL_PASS` | No | SMTP for OTP emails (returns 503 if unset) |
+| `JAZZCASH_MERCHANT_ID` / `JAZZCASH_PASSWORD` / `JAZZCASH_INTEGRITY_SALT` | No | JazzCash payments (mock flow works without these) |
+| `CORS_ORIGINS` | No | Comma-separated allowed origins |
 
 ## Useful Scripts
 
@@ -156,6 +133,7 @@ Seed helpers:
 
 ## Notes
 
-- The frontend talks directly to `VITE_API_URL` and does not rely on a Vite `/api` proxy.
-- GLB assets are served from `frontend/public/carmodels/` and `frontend/public/models/`
-- If PowerShell blocks `npm`, use `npm.cmd`
+- The frontend talks directly to `VITE_API_URL` — no Vite `/api` proxy.
+- GLB assets are served from `frontend/public/models/`
+- Mock payment (`/payments/mock-complete`) is available for local dev without real JazzCash credentials.
+- If PowerShell blocks `npm`, use `npm.cmd`.

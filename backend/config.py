@@ -28,10 +28,33 @@ class Settings(BaseSettings):
 
     email_user: str | None = None
     email_pass: str | None = None
-    smtp_host: str = "smtp.zoho.com"
+    smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 465
 
     cors_origins: str = "http://localhost:5173"
+
+    # Frontend base URL used to redirect the customer back after online payment.
+    frontend_base_url: str = "http://localhost:5173"
+
+    # JazzCash (HTTP POST / Page Redirection) online payment gateway.
+    # Leave credentials blank to disable online payment (only COD is offered then).
+    jazzcash_merchant_id: str | None = None
+    jazzcash_password: str | None = None
+    jazzcash_integrity_salt: str | None = None
+    jazzcash_sandbox: bool = True
+    # Backend URL JazzCash redirects the customer's browser back to after payment.
+    jazzcash_return_url: str = "http://localhost:8000/payments/jazzcash/callback"
+    # Transaction type for the hosted page. Leave EMPTY so the JazzCash page lets
+    # the customer pick wallet OR debit/credit card OR OTC. Set to "MWALLET" to
+    # force the JazzCash wallet flow only.
+    jazzcash_txn_type: str = ""
+
+    # Which online provider backs the "online payment" option:
+    #   "auto"     -> JazzCash if its credentials are set, otherwise the built-in
+    #                 demo gateway (no account / no real money — for testing & FYP).
+    #   "jazzcash" -> always JazzCash (online payment is unavailable if unconfigured).
+    #   "mock"     -> always the built-in demo gateway.
+    payment_mode: str = "auto"
 
     gemma_api_key: str | None = None
     usd_to_pkr_rate: float = 279.31
@@ -44,9 +67,36 @@ class Settings(BaseSettings):
     parts_sync_timeout_seconds: int = 20
     parts_sync_user_agent: str = "AutoPartBazaarSync/1.0"
 
-    # Region & category filters — only Lahore car/bike spare parts
+    # Region & category filters - only Lahore car spare parts
     parts_filter_city: str = "Lahore"
-    parts_filter_vehicle_types: str = "car,bike"
+    parts_filter_vehicle_types: str = "car"
+
+    # Markup applied to all fetched/synced product prices (percent, e.g. 5.0 = +5%)
+    parts_markup_percent: float = 5.0
+
+    @property
+    def jazzcash_enabled(self) -> bool:
+        return bool(
+            self.jazzcash_merchant_id
+            and self.jazzcash_password
+            and self.jazzcash_integrity_salt
+        )
+
+    @property
+    def online_payment_provider(self) -> str | None:
+        """Resolve the active online-payment provider, or None if unavailable."""
+        mode = (self.payment_mode or "auto").lower()
+        if mode == "jazzcash":
+            return "jazzcash" if self.jazzcash_enabled else None
+        if mode == "mock":
+            return "mock"
+        # auto
+        return "jazzcash" if self.jazzcash_enabled else "mock"
+
+    @property
+    def jazzcash_post_url(self) -> str:
+        host = "sandbox.jazzcash.com.pk" if self.jazzcash_sandbox else "payments.jazzcash.com.pk"
+        return f"https://{host}/CustomerPortal/transactionmanagement/merchantform/"
 
     @field_validator("secret_key")
     @classmethod

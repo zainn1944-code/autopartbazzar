@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { useState } from "react";
+import { useCart } from "@/hooks/useCart";
 import ProductVisual from "@/components/ui/ProductVisual";
 
 function sourceSiteName(sourceName) {
@@ -12,6 +14,35 @@ function sourceSiteName(sourceName) {
 
 export default function ProductCard({ product, viewMode }) {
   const isList = viewMode === "list";
+  const { addToCart } = useCart();
+  const [justAdded, setJustAdded] = useState(false);
+  const productRef = product.productId || product._id || product.id;
+  const canAddToCart = !product.isLiveListing && product.stockQuantity !== 0;
+  const addButtonLabel = product.isLiveListing
+    ? "External Only"
+    : canAddToCart
+      ? justAdded ? "Added" : "Add to Cart"
+      : "Out of Stock";
+
+  const handleAddToCart = (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!canAddToCart) return;
+
+    addToCart({
+      id: productRef,
+      productId: product.productId,
+      name: product.name,
+      price: product.price,
+      imageUrl: product.imageUrl,
+      category: product.category,
+      make: product.make,
+      description: product.description,
+      quantity: 1,
+    });
+    setJustAdded(true);
+    window.setTimeout(() => setJustAdded(false), 1200);
+  };
 
   return (
     <Link to={`/productdetail/${product.productId}`} className="group block h-full">
@@ -141,11 +172,14 @@ export default function ProductCard({ product, viewMode }) {
                   </a>
                 ) : null}
                 <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  disabled={!canAddToCart}
                   className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold text-gray-300
                     transition-all duration-300 hover:border-red-500/60 hover:bg-red-600/20 hover:text-white
-                    active:scale-95 whitespace-nowrap"
+                    active:scale-95 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-white/15 disabled:hover:bg-white/5"
                 >
-                  View Details
+                  {addButtonLabel}
                 </button>
               </div>
             </div>

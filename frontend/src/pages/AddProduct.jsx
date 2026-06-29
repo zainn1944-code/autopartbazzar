@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axiosInstance from "@/api/axiosInstance";
+import AdminHeader from "@/components/ui/AdminHeader.jsx";
 
 const AddProductForm = () => {
   const [product, setProduct] = useState({
@@ -108,15 +109,17 @@ const AddProductForm = () => {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-start justify-start p-12"
-      style={{
-        backgroundImage: `url('/Images/car1.jpg')`,
-        backgroundRepeat: "no-repeat",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
+    <>
+      <AdminHeader />
+      <div
+        className="min-h-screen flex items-start justify-start p-12"
+        style={{
+          backgroundImage: `url('/Images/car1.jpg')`,
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
       <form
         onSubmit={handleSubmit}
         className="space-y-6 text-white w-full max-w-md bg-opacity-70 bg-black p-6 rounded shadow-lg"
@@ -339,7 +342,8 @@ const AddProductForm = () => {
           {loading ? "Adding Product..." : "Add Product"}
         </button>
       </form>
-    </div>
+      </div>
+    </>
   );
 };
 

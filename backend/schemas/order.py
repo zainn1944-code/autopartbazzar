@@ -15,7 +15,7 @@ class ShippingAddress(BaseModel):
 class OrderItemCreate(BaseModel):
     product: str | int | None = None
     quantity: int = Field(ge=1)
-    price: float
+    price: float = Field(ge=0)
     snapshot: dict | None = None
 
 
@@ -23,6 +23,8 @@ class OrderCreate(BaseModel):
     items: list[OrderItemCreate]
     totalAmount: float
     shippingAddress: ShippingAddress
+    paymentMethod: str = "COD"  # "COD" or "JazzCash"
+    idempotencyKey: str | None = None  # client-generated; dedupes retried submits
 
 
 class OrderRead(BaseModel):

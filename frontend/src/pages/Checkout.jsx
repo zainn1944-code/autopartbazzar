@@ -3,11 +3,12 @@ import Navbar from "@/components/ui/navbar";
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
-import { useCart } from "@/context/CartContext.jsx";
+import { useCart } from "@/hooks/useCart";
+import ProductVisual from "@/components/ui/ProductVisual";
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const { cart, clearCart } = useCart();
+  const { cart, subtotal, clearCart } = useCart();
 
   // States for form data
   const [shippingInfo, setShippingInfo] = useState({
@@ -20,6 +21,7 @@ export default function Checkout() {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("COD"); // "COD" | "JazzCash"
 
   useEffect(() => {
     if (cart.length === 0) {
@@ -29,7 +31,6 @@ export default function Checkout() {
 
   const cartItems = cart;
 
-  const subtotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
   const shipping = 250;
   const total = subtotal + shipping;
 
@@ -41,8 +42,24 @@ export default function Checkout() {
     }));
   };
 
+  // Build a hidden form and POST the customer's browser to JazzCash's hosted page.
+  const redirectToJazzCash = (payment) => {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = payment.url;
+    Object.entries(payment.fields).forEach(([name, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value ?? "";
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  };
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e?.preventDefault();
 
     if (cartItems.length === 0) {
       alert("Your cart is empty!");
@@ -69,12 +86,27 @@ export default function Checkout() {
       })),
       totalAmount: total,
       shippingAddress: shippingInfo,
+      paymentMethod,
+      // Same key on an accidental retry → backend returns the original order
+      // instead of creating a duplicate.
+      idempotencyKey:
+        (window.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`),
     };
 
     try {
       const response = await axiosInstance.post("/orders", orderData);
       if (response.status >= 200 && response.status < 300) {
         localStorage.setItem("orderDetails", JSON.stringify(response.data));
+        // Online payment: hand off to the gateway (cart is cleared after payment).
+        const pay = response.data.payment;
+        if (pay?.provider === "jazzcash") {
+          redirectToJazzCash(pay);
+          return;
+        }
+        if (pay?.provider === "mock") {
+          navigate(pay.redirectUrl);
+          return;
+        }
         clearCart();
         navigate("/order-confirmation");
       } else {
@@ -111,7 +143,11 @@ export default function Checkout() {
           
           {/* Left Column: Form */}
           <div className="lg:col-span-7 xl:col-span-8">
-            <form onSubmit={handleSubmit} className="space-y-8 rounded-3xl border border-white/10 bg-white/5 p-8 sm:p-10 backdrop-blur-xl shadow-2xl">
+            <form
+              id="checkout-form"
+              onSubmit={handleSubmit}
+              className="space-y-8 rounded-3xl border border-white/10 bg-white/5 p-8 sm:p-10 backdrop-blur-xl shadow-2xl"
+            >
               
               <div>
                 <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
@@ -211,16 +247,45 @@ export default function Checkout() {
                   <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/20 border border-red-500/50 text-red-500 text-sm font-bold">2</span>
                   Payment Method
                 </h2>
-                <div className="rounded-xl border-2 border-red-500/50 bg-red-500/10 p-6 flex items-start gap-4">
-                  <div className="mt-1 shrink-0 text-red-500">
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white mb-1">Cash on Delivery (COD)</h3>
-                    <p className="text-gray-400 text-sm leading-relaxed">Pay with cash when your order is delivered to your doorstep. Currently, this is the only supported payment method.</p>
-                  </div>
+
+                <div className="space-y-4">
+                  {/* Cash on Delivery */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("COD")}
+                    className={`w-full text-left rounded-xl border-2 p-6 flex items-start gap-4 transition-all ${
+                      paymentMethod === "COD"
+                        ? "border-red-500/50 bg-red-500/10"
+                        : "border-white/10 bg-black/30 hover:border-white/20"
+                    }`}
+                  >
+                    <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === "COD" ? "border-red-500" : "border-gray-500"}`}>
+                      {paymentMethod === "COD" && <span className="h-2.5 w-2.5 rounded-full bg-red-500" />}
+                    </span>
+                    <div>
+                      <h3 className="text-lg font-bold text-white mb-1">Cash on Delivery (COD)</h3>
+                      <p className="text-gray-400 text-sm leading-relaxed">Pay with cash when your order is delivered to your doorstep.</p>
+                    </div>
+                  </button>
+
+                  {/* JazzCash / Online */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("JazzCash")}
+                    className={`w-full text-left rounded-xl border-2 p-6 flex items-start gap-4 transition-all ${
+                      paymentMethod === "JazzCash"
+                        ? "border-red-500/50 bg-red-500/10"
+                        : "border-white/10 bg-black/30 hover:border-white/20"
+                    }`}
+                  >
+                    <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${paymentMethod === "JazzCash" ? "border-red-500" : "border-gray-500"}`}>
+                      {paymentMethod === "JazzCash" && <span className="h-2.5 w-2.5 rounded-full bg-red-500" />}
+                    </span>
+                    <div>
+                      <h3 className="text-lg font-bold text-white mb-1">Online Payment — JazzCash / Card</h3>
+                      <p className="text-gray-400 text-sm leading-relaxed">Pay securely now with your JazzCash wallet or any debit/credit card. You'll be redirected to the secure payment page.</p>
+                    </div>
+                  </button>
                 </div>
               </div>
 
@@ -233,7 +298,7 @@ export default function Checkout() {
                 >
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
                   <span className="relative flex items-center justify-center gap-2 text-lg">
-                    {isSubmitting ? "Processing..." : "Place Order Now"}
+                    {isSubmitting ? "Processing..." : paymentMethod === "JazzCash" ? "Pay Now" : "Place Order Now"}
                   </span>
                 </button>
               </div>
@@ -250,7 +315,15 @@ export default function Checkout() {
                 {cartItems.map((item) => (
                   <div key={item.id} className="flex items-start gap-4 pb-4 border-b border-white/5">
                     <div className="relative w-16 h-16 rounded-xl bg-black/50 border border-white/10 overflow-hidden shrink-0">
-                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-contain p-2" />
+                      <ProductVisual
+                        name={item.name}
+                        make={item.make}
+                        category={item.category}
+                        imageUrl={item.imageUrl}
+                        compact
+                        className="relative h-full w-full"
+                        imageClassName="h-full w-full object-contain p-2"
+                      />
                       <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center border-2 border-[#1a1a1a]">
                         {item.quantity}
                       </span>
@@ -287,13 +360,14 @@ export default function Checkout() {
 
               {/* Desktop Submit Button */}
               <button
-                onClick={handleSubmit}
+                type="submit"
+                form="checkout-form"
                 disabled={isSubmitting}
                 className="w-full relative group overflow-hidden rounded-xl bg-gradient-to-r from-red-600 to-red-500 px-6 py-5 font-bold text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] transition-all hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
                 <span className="relative flex items-center justify-center gap-2 text-lg">
-                  {isSubmitting ? "Processing..." : "Place Order Now"}
+                  {isSubmitting ? "Processing..." : paymentMethod === "JazzCash" ? "Pay Now" : "Place Order Now"}
                   {!isSubmitting && (
                     <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

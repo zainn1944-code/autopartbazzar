@@ -13,12 +13,12 @@ const TARGET_KEYWORDS = {
   exhaust:      ["exhaust", "muffler"],
 };
 
-function applyMeshChange(carModel, threeJsChange) {
+function applyMeshChange(carModel, threeJsChange, paintMaterials) {
   if (!carModel || !threeJsChange) return;
   const { target_mesh, color_hex, material_properties } = threeJsChange;
 
   if (target_mesh === "body") {
-    if (color_hex) applyBodyPaint(carModel, color_hex);
+    if (color_hex) applyBodyPaint(carModel, color_hex, "gloss", { onlyMaterials: paintMaterials });
     return;
   }
 
@@ -94,9 +94,25 @@ export function useCarAI() {
     }
   };
 
-  const applyToModel = (carModel, threeJsChange) => {
-    applyMeshChange(carModel, threeJsChange);
+  const applyToModel = (carModel, threeJsChange, paintMaterials) => {
+    applyMeshChange(carModel, threeJsChange, paintMaterials);
   };
 
-  return { getRecommendation, applyToModel, loading, error, lastRecommendation };
+  // Telemetry — fire-and-forget. We never let a failed track call surface to the UI
+  // because tracking is auxiliary; user actions must succeed regardless.
+  const trackEvent = ({ recommendationId, event, productId, carMake, carModel, buildStyle }) => {
+    if (!recommendationId || !event) return;
+    axiosInstance
+      .post("/car-ai/track", {
+        recommendation_id: recommendationId,
+        event,
+        product_id: productId ?? null,
+        car_make: carMake ?? null,
+        car_model: carModel ?? null,
+        build_style: buildStyle ?? null,
+      })
+      .catch(() => {});
+  };
+
+  return { getRecommendation, applyToModel, trackEvent, loading, error, lastRecommendation };
 }

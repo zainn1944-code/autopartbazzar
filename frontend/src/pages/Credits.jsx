@@ -17,6 +17,20 @@ const MODEL_CREDITS = [
     assetPath: "/models/toyota/supra.glb",
   },
   {
+    title: "Toyota Hilux 97",
+    author: "Muhammad Reyhan",
+    license: "CC BY 3.0",
+    sourceUrl: "https://poly.pizza/m/8-0nFArehjd",
+    assetPath: "/models/toyota/hilux.glb",
+  },
+  {
+    title: "Toyota Corolla E170 (2017)",
+    author: "Sketchfab community",
+    license: "CC BY 4.0",
+    sourceUrl: "https://sketchfab.com/3d-models/toyota-corolla-e170-2017",
+    assetPath: "/models/toyota/corolla.glb",
+  },
+  {
     title: "Lamborghini Huracan LP-6104 2014",
     author: "MdMahib",
     license: "CC BY 4.0",
@@ -33,7 +47,7 @@ export default function Credits() {
         <div className="mb-10">
           <h1 className="text-4xl font-bold tracking-tight">3D Model Credits</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-300">
-            The garage uses CC BY 4.0 vehicle models. Credit is retained here for the
+            The garage uses CC BY licensed vehicle models. Credit is retained here for the
             BMW, Toyota, and Lamborghini assets bundled with the configurator.
           </p>
         </div>

@@ -46,3 +46,10 @@ Thumbs.db
 # Temporary downloads / scratch folders
 tmp_downloads/
 tmp/
+
+# Claude Code local settings (may contain passwords/tokens)
+.claude/settings.local.json
+
+# Debug / scratch scripts
+probe_wheels.mjs
+frontend/inspect_glb.mjs

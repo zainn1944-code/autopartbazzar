@@ -13,6 +13,7 @@ import {
   Legend,
 } from "chart.js";
 import axiosInstance from "@/api/axiosInstance";
+import AdminHeader from "@/components/ui/AdminHeader.jsx";
 
 ChartJS.register(LineElement, PointElement, CategoryScale, LinearScale, Title, Tooltip, Legend);
 
@@ -217,8 +218,23 @@ export default function AdminDashboard() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const { data } = await axiosInstance.get("/products");
-        setProducts(data.products || []);
+        // /products is paginated (max 48 per page), so loop through every
+        // page to get the full inventory for accurate totals and charts.
+        const pageSize = 48;
+        let page = 1;
+        let totalPages = 1;
+        const all = [];
+
+        do {
+          const { data } = await axiosInstance.get("/products", {
+            params: { page, pageSize },
+          });
+          all.push(...(data.products || []));
+          totalPages = data.meta?.totalPages || 1;
+          page += 1;
+        } while (page <= totalPages);
+
+        setProducts(all);
       } catch (requestError) {
         setError(requestError.response?.data?.detail || "Failed to load inventory.");
       } finally {
@@ -319,10 +335,12 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen flex bg-black">
+    <>
+      <AdminHeader />
+      <div className="min-h-screen flex bg-black">
       <aside className="hidden h-screen w-64 shrink-0 border-r border-gray-800 bg-gray-950 text-white lg:block">
         <div className="p-6">
-          <h3 className="text-2xl font-bold text-red-500">Autopart Bazaar</h3>
+          <h3 className="text-2xl font-bold text-red-500">Auto Part Bazar</h3>
           <p className="mt-2 text-sm text-gray-400">Live inventory admin</p>
         </div>
         <nav className="px-4 pb-6">
@@ -500,6 +518,7 @@ export default function AdminDashboard() {
           </div>
         </main>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

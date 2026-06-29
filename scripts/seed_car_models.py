@@ -17,67 +17,25 @@ from models.car_model import CarModel  # noqa: E402
 
 CAR_MODELS = [
     {
-        "make": "Toyota",
-        "car": "Corolla",
-        "model": 2022.0,
-        "model_url": "/carmodels/corolla2.glb",
-        "source_url": "https://sketchfab.com/3d-models/toyota-corolla-4703efa36e4b4aa9a342db3153ce3edd",
-    },
-    {
-        "make": "Toyota",
-        "car": "Camry",
-        "model": 2024.0,
-        "model_url": "",
-        "source_url": "https://sketchfab.com/3d-models/toyota-camry-v80-98c70e5aa53446728fea4d8f448bbf33",
+        "make": "Honda",
+        "car": "Civic",
+        "model": 2023.0,
+        "model_url": "/models/honda/civic.glb",
+        "source_url": "https://sketchfab.com/3d-models/honda-civic-ff844e296f214e709c0d0691d031c68b",
     },
     {
         "make": "Toyota",
         "car": "Hilux",
         "model": 2026.0,
-        "model_url": "",
-        "source_url": "https://sketchfab.com/3d-models/toyota-hilux-417915f419f945c8a424b2a7943eb25a",
+        "model_url": "/models/toyota/hilux.glb",
+        "source_url": "https://poly.pizza/m/8-0nFArehjd",
     },
     {
-        "make": "Honda",
-        "car": "Civic",
-        "model": 2023.0,
-        "model_url": "/carmodels/civic2.glb",
-        "source_url": "https://sketchfab.com/3d-models/honda-civic-ff844e296f214e709c0d0691d031c68b",
-    },
-    {
-        "make": "Honda",
-        "car": "Accord",
+        "make": "Toyota",
+        "car": "Corolla",
         "model": 2017.0,
-        "model_url": "",
-        "source_url": "https://sketchfab.com/3d-models/honda-accord-2017-68892cd369e84a218e5e5dcf82365ee3",
-    },
-    {
-        "make": "Honda",
-        "car": "CR-V",
-        "model": 2023.0,
-        "model_url": "",
-        "source_url": "https://sketchfab.com/3d-models/honda-cr-v-4d0751311d76473b81377f5bd2da273b",
-    },
-    {
-        "make": "BMW",
-        "car": "3 Series",
-        "model": 2012.0,
-        "model_url": "/carmodels/bmw.glb",
-        "source_url": "https://sketchfab.com/3d-models/bmw-3-series-e91-2004-2012-b048a2c6a67d416eb31d4c620e5b4426",
-    },
-    {
-        "make": "BMW",
-        "car": "M3",
-        "model": 1990.0,
-        "model_url": "",
-        "source_url": "https://sketchfab.com/3d-models/free-bmw-m3-e30-ac3c7013434e403e8faff87948caf422",
-    },
-    {
-        "make": "BMW",
-        "car": "X5",
-        "model": 2021.0,
-        "model_url": "",
-        "source_url": "https://sketchfab.com/3d-models/bmw-x5-f1adb5c9133f4938a9ee03076c2a1e5a",
+        "model_url": "/models/toyota/corolla.glb",
+        "source_url": "https://sketchfab.com/3d-models/toyota-corolla-e170-2017",
     },
 ]
 
@@ -106,6 +64,13 @@ async def main() -> None:
                 row.model_url = item["model_url"]
                 for duplicate in rows[1:]:
                     await db.delete(duplicate)
+
+        # Remove any catalog rows that are no longer part of the curated list
+        keep = {(item["make"], item["car"]) for item in CAR_MODELS}
+        existing = await db.execute(select(CarModel))
+        for row in existing.scalars().all():
+            if (row.make, row.car) not in keep:
+                await db.delete(row)
 
         await db.commit()
 

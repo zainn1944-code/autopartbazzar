@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
 import { useAuth } from "@/hooks/useAuth";
-import Navbar from "@/components/ui/navbar.jsx";
+import AdminHeader from "@/components/ui/AdminHeader.jsx";
 
 export default function AdminUsers() {
   const { isAdmin, user: currentUser } = useAuth();
@@ -54,7 +54,7 @@ export default function AdminUsers() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Navbar />
+      <AdminHeader />
       <div className="max-w-5xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">User Management</h1>
 

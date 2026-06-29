@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axiosInstance from "@/api/axiosInstance";
+import AdminHeader from "@/components/ui/AdminHeader.jsx";
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.detail || fallback;
@@ -66,15 +67,17 @@ const UpdateProductPage = () => {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-start justify-start p-12"
-      style={{
-        backgroundImage: `url('/Images/car1.jpg')`,
-        backgroundRepeat: "no-repeat",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
+    <>
+      <AdminHeader />
+      <div
+        className="min-h-screen flex items-start justify-start p-12"
+        style={{
+          backgroundImage: `url('/Images/car1.jpg')`,
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
       {alert && (
         <div className="fixed top-5 left-1/2 transform -translate-x-1/2 z-50">
           <div
@@ -274,7 +277,8 @@ const UpdateProductPage = () => {
           </>
         )}
       </form>
-    </div>
+      </div>
+    </>
   );
 };
 

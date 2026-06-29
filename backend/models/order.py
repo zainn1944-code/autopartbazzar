@@ -14,6 +14,11 @@ class Order(Base):
     total_amount: Mapped[float] = mapped_column()
     status: Mapped[str] = mapped_column(String(32), default="Pending")
     payment_status: Mapped[str] = mapped_column(String(32), default="Pending")
+    payment_method: Mapped[str] = mapped_column(String(32), default="COD")
+    payment_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
     shipping_address: Mapped[dict] = mapped_column(JSON)
     order_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

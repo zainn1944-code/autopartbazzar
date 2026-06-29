@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
-import { useCart } from "@/context/CartContext.jsx";
+import { useCart } from "@/hooks/useCart";
 import { useRecentlyViewed } from "@/hooks/useRecentlyViewed.js";
 import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
@@ -27,6 +27,7 @@ const ProductDetail = () => {
   const liveSyncText = product?.lastSyncedAt
     ? new Date(product.lastSyncedAt).toLocaleString()
     : null;
+  const canAddToCart = product ? !product.isLiveListing && product.stockQuantity !== 0 : false;
 
   useEffect(() => {
     if (!id) return;
@@ -66,7 +67,7 @@ const ProductDetail = () => {
   const decreaseQuantity = () => setQuantity((current) => (current > 1 ? current - 1 : 1));
 
   const handleAddToCart = () => {
-    if (product) {
+    if (product && canAddToCart) {
       addToCart({
         id: product._id || String(product.id),
         productId: product.productId,
@@ -82,6 +83,7 @@ const ProductDetail = () => {
   };
 
   const handleBuyNow = () => {
+    if (!canAddToCart) return;
     handleAddToCart();
     navigate("/cart");
   };
@@ -283,16 +285,18 @@ const ProductDetail = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={handleAddToCart}
-                    className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-4 font-semibold text-white transition-all hover:bg-white/10 hover:border-white/20 active:scale-[0.98]"
+                    disabled={!canAddToCart}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-6 py-4 font-semibold text-white transition-all hover:bg-white/10 hover:border-white/20 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                     </svg>
-                    Add to Cart
+                    {product.isLiveListing ? "External Listing" : product.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"}
                   </button>
                   <button
                     onClick={handleBuyNow}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-red-500 px-6 py-4 font-bold text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] transition-all hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:scale-[1.02] active:scale-[0.98]"
+                    disabled={!canAddToCart}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-red-500 px-6 py-4 font-bold text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] transition-all hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] hover:scale-[1.02] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
                   >
                     Buy Now
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -130,21 +130,19 @@ export default function EnterEmail() {
         <div className="bg-black p-6 flex flex-col justify-center items-center md:items-start space-y-4">
           <h1 className="text-3xl font-semibold text-center md:text-left">Enter Your Email</h1>
           <p className="text-xs text-center text-slate-400 md:text-left">
-            Enter your email to verify and reset your password.
-          </p>
-          <p className="text-xs text-center text-slate-500 md:text-left">
-            Local password reset emails require `EMAIL_USER` and `EMAIL_PASS` in `backend/.env`.
+            Enter your email and we'll send you a code to reset your password.
           </p>
           <form onSubmit={handleVerifyEmail} className="mt-4 w-full max-w-md">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="email" className="block text-sm font-medium text-slate-300">
               Email Address
             </label>
             <input
               id="email"
               type="email"
               value={email}
+              placeholder="you@example.com"
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-2 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+              className="mt-2 block w-full p-2.5 bg-transparent text-white border border-white/15 rounded-full placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
 
             {/* Error Message */}
@@ -158,7 +156,7 @@ export default function EnterEmail() {
             ) : (
               <button
                 type="submit"
-                className="mt-4 w-full bg-indigo-600 text-white p-2 rounded-md hover:bg-indigo-700"
+                className="mt-4 w-full bg-indigo-600 text-white p-2.5 rounded-full hover:bg-indigo-700 transition-colors"
               >
                 Verify Email
               </button>

@@ -51,10 +51,10 @@ const Home = () => {
             <div className="flex flex-col justify-start items-center lg:items-start gap-10">
               <div className="flex flex-col justify-start items-center lg:items-start gap-4">
                 <h2 className="text-4xl font-semibold leading-normal text-center lg:text-left">
-                  Revolutionizing Car Customization with AutoPartBazaar
+                  Revolutionizing Car Customization with Auto Part Bazar
                 </h2>
                 <p className="text-lg text-center lg:text-left">
-                  AutoPartBazaar is a cutting-edge e-commerce platform that
+                  Auto Part Bazar is a cutting-edge e-commerce platform that
                   simplifies finding and customizing car exterior spare parts.
                   With advanced 3D visualization, users can see how parts will
                   look on their vehicles in real-time, ensuring a seamless and
@@ -63,7 +63,7 @@ const Home = () => {
               </div>
               <Link to="/blog">
               <button className="bg-red-600 hover:bg-gray-800 text-white py-3 px-6 rounded-lg shadow-md transition-all duration-700">
-                Explore AutoPartBazaar
+                Explore Auto Part Bazar
               </button>
               </Link>
             </div>
@@ -71,7 +71,7 @@ const Home = () => {
               <img
                 className="rounded-3xl object-cover w-full"
                 src="/Images/car2.jpg"
-                alt="AutoPartBazaar - 3D Customization Preview"
+                alt="Auto Part Bazar - 3D Customization Preview"
                 width={800}
                 height={600}
               />

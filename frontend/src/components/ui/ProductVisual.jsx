@@ -118,7 +118,7 @@ const ProductVisual = ({
           <h3 className={compact ? "text-sm font-semibold" : "text-lg font-semibold leading-snug"}>
             {name}
           </h3>
-          <p className="mt-2 text-xs text-white/55">AutoPart Bazaar product preview.</p>
+          <p className="mt-2 text-xs text-white/55">Auto Part Bazar product preview.</p>
         </div>
       </div>
     </div>

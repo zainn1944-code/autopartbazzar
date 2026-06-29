@@ -19,6 +19,7 @@ import ForgetPass from "@/pages/ForgetPass.jsx";
 import Garage from "@/pages/Garage.jsx";
 import Home from "@/pages/Home.jsx";
 import Login from "@/pages/Login.jsx";
+import MockPayment from "@/pages/MockPayment.jsx";
 import MyOrders from "@/pages/MyOrders.jsx";
 import OrderConfirmation from "@/pages/OrderConfirmation.jsx";
 import ProductDetail from "@/pages/ProductDetail.jsx";
@@ -48,6 +49,14 @@ export default function App() {
         element={
           <PrivateRoute>
             <Checkout />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/mock-payment"
+        element={
+          <PrivateRoute>
+            <MockPayment />
           </PrivateRoute>
         }
       />

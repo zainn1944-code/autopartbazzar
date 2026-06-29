@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
 import { useAuth } from "@/hooks/useAuth";
-import Navbar from "@/components/ui/navbar.jsx";
+import AdminHeader from "@/components/ui/AdminHeader.jsx";
 
 const STATUS_OPTIONS = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
 
@@ -66,7 +66,7 @@ export default function AdminOrders() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Navbar />
+      <AdminHeader />
       <div className="max-w-7xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Order Management</h1>
 

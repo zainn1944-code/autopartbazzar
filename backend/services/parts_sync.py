@@ -205,6 +205,48 @@ _SPARE_PART_KEYWORDS = frozenset({
     "oem", "genuine part", "aftermarket", "spare",
 })
 
+_VEHICLE_TYPE_ALIASES = {
+    "car": "car",
+    "cars": "car",
+    "auto": "car",
+    "automotive": "car",
+    "vehicle": "car",
+    "vehicles": "car",
+    "bike": "bike",
+    "bikes": "bike",
+    "motorcycle": "bike",
+    "motorcycles": "bike",
+    "motorbike": "bike",
+    "motorbikes": "bike",
+    "scooter": "bike",
+    "scooters": "bike",
+}
+
+_BIKE_KEYWORDS = frozenset({
+    "bike",
+    "motorcycle",
+    "motorbike",
+    "scooter",
+    "moped",
+    "vespa",
+    "cd70",
+    "cd 70",
+    "cd125",
+    "cd 125",
+    "cg125",
+    "cg 125",
+    "honda 125",
+    "yamaha ybr",
+    "ybr",
+    "pridor",
+    "road prince",
+    "70cc",
+    "100cc",
+    "110cc",
+    "125cc",
+    "150cc",
+})
+
 _NON_PART_KEYWORDS = frozenset({
     "laptop", "mobile", "phone", "computer", "tablet", "furniture",
     "clothes", "shoes", "property", "apartment", "flat", "plot", "house",
@@ -223,6 +265,45 @@ def _is_vehicle_spare_part(title: str | None, description: str | None, category:
         return False
 
     return any(kw in haystack for kw in _SPARE_PART_KEYWORDS)
+
+
+def _parse_vehicle_type_filter(raw_filter: str | None) -> set[str]:
+    if not raw_filter:
+        return set()
+
+    allowed: set[str] = set()
+    for value in re.split(r"[,;|\s]+", raw_filter):
+        normalized = _VEHICLE_TYPE_ALIASES.get(value.strip().lower())
+        if normalized:
+            allowed.add(normalized)
+    return allowed
+
+
+def _has_bike_signal(title: str | None, description: str | None, category: str | None) -> bool:
+    haystack = " ".join(filter(None, [
+        _normalize_whitespace(title),
+        _normalize_whitespace(description),
+        _normalize_whitespace(category),
+    ])).lower()
+    return any(kw in haystack for kw in _BIKE_KEYWORDS)
+
+
+def _matches_vehicle_type_filter(
+    title: str | None,
+    description: str | None,
+    category: str | None,
+    raw_filter: str | None,
+) -> bool:
+    allowed = _parse_vehicle_type_filter(raw_filter)
+    if not allowed or allowed == {"car", "bike"}:
+        return True
+
+    has_bike_signal = _has_bike_signal(title, description, category)
+    if "car" in allowed:
+        return not has_bike_signal
+    if "bike" in allowed:
+        return has_bike_signal
+    return True
 
 
 _PROVINCE_OF = {"lahore": "punjab", "karachi": "sindh", "islamabad": "islamabad capital territory", "peshawar": "khyber pakhtunkhwa"}
@@ -572,18 +653,41 @@ def _normalize_remote_product(raw: dict, feed: FeedSource, settings, synced_at: 
         if original_price is not None:
             original_price = round(original_price * settings.usd_to_pkr_rate, 2)
 
+    # Apply our store markup so fetched prices reflect our margin on the website.
+    # Marking up original_price by the same factor keeps the visible discount % stable.
+    markup_factor = 1 + (getattr(settings, "parts_markup_percent", 0.0) / 100.0)
+    if markup_factor != 1:
+        price = round(price * markup_factor, 2)
+        if original_price is not None:
+            original_price = round(original_price * markup_factor, 2)
+
     image_url = _make_absolute_url(
         _pick_first(raw.get("image_url"), raw.get("thumbnail"), raw.get("image"), raw.get("images")),
-        feed.url,
-    )
-    source_url = _make_absolute_url(
-        _pick_first(raw.get("source_url"), raw.get("url"), raw.get("@id"), feed.url),
         feed.url,
     )
     category = _pick_first(raw.get("category"), raw.get("product_type"), raw.get("@type"))
     make = _pick_first(raw.get("make"), raw.get("brand"))
 
+    # Provenance: store the source feed name + the original listing URL so the
+    # product page can link back to the website the part was fetched from
+    # ("Open Original Listing"). The part is still treated as our own catalogue
+    # item (is_live_listing stays False, so it remains addable to cart).
+    # source_label + external_id also build a stable product_id so that
+    # re-syncing the same listing updates one row instead of duplicating it.
+    source_label = (
+        _normalize_whitespace(_pick_first(raw.get("source"), raw.get("source_name"))) or feed.name
+    )
+    source_url = _make_absolute_url(
+        _pick_first(raw.get("source_url"), raw.get("product_url"), raw.get("url"), raw.get("link")),
+        feed.url,
+    ) or feed.url
+    external_id = _normalize_whitespace(
+        str(_pick_first(raw.get("external_id"), raw.get("id"), raw.get("sku"), raw.get("product_id"), raw.get("mpn")) or "")
+    ) or None
+    stable_key = external_id or re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
+
     normalized = {
+        "product_id": _generate_product_id(source_label, stable_key),
         "name": title,
         "description": description,
         "price": price,
@@ -599,13 +703,13 @@ def _normalize_remote_product(raw: dict, feed: FeedSource, settings, synced_at: 
         ),
         "image_url": image_url,
         "model_url": _normalize_whitespace(raw.get("model_url")),
-        "source_name": _normalize_whitespace(_pick_first(raw.get("source"), raw.get("source_name"))) or feed.name,
+        # Keep the source feed name + original listing URL so the product page can
+        # link back to the website it was fetched from. Still our own catalogue
+        # item (is_live_listing False), so it stays addable to cart.
+        "source_name": source_label,
         "source_url": source_url,
-        "external_id": _normalize_whitespace(
-            str(_pick_first(raw.get("external_id"), raw.get("id"), raw.get("sku"), raw.get("product_id"), raw.get("mpn")) or "")
-        )
-        or None,
-        "is_live_listing": True,
+        "external_id": external_id,
+        "is_live_listing": False,
         "last_synced_at": synced_at,
     }
 
@@ -614,8 +718,19 @@ def _normalize_remote_product(raw: dict, feed: FeedSource, settings, synced_at: 
     if not _is_target_city(normalized["city"], filter_city):
         return None
 
-    # Filter: car / bike spare parts only (description + title must match spare-part keywords)
+    # Filter: spare parts only (description + title must match spare-part keywords)
     if not _is_vehicle_spare_part(normalized["name"], normalized.get("description"), normalized.get("category")):
+        return None
+
+    # Filter: vehicle type, defaulting to car-only. This keeps generic car parts,
+    # but rejects listings that clearly belong to bikes or motorcycles.
+    vehicle_filter = getattr(settings, "parts_filter_vehicle_types", "car")
+    if not _matches_vehicle_type_filter(
+        normalized["name"],
+        normalized.get("description"),
+        normalized.get("category"),
+        vehicle_filter,
+    ):
         return None
 
     # Default city to filter city when raw data has no location field
@@ -743,10 +858,9 @@ async def fetch_and_store_daily_parts(triggered_by: str = "manual") -> dict:
                         feed_skipped += 1
                         continue
 
-                    pid = _generate_product_id(normalized["source_name"], normalized.get("external_id"))
+                    pid = normalized["product_id"]
                     existing = await _find_existing_product(session, normalized, product_id=pid)
                     if existing is None:
-                        normalized["product_id"] = pid
                         session.add(Product(**normalized))
                         feed_created += 1
                     else:

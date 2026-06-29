@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axiosInstance from "@/api/axiosInstance";
+import AdminHeader from "@/components/ui/AdminHeader.jsx";
 
 const getErrorMessage = (error, fallback) =>
   error.response?.data?.detail || fallback;
@@ -62,15 +63,17 @@ const RemoveProductPage = () => {
   };
 
   return (
-    <div
-      className="min-h-screen flex items-start justify-start p-12"
-      style={{
-        backgroundImage: `url('/Images/car1.jpg')`,
-        backgroundRepeat: "no-repeat",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
+    <>
+      <AdminHeader />
+      <div
+        className="min-h-screen flex items-start justify-start p-12"
+        style={{
+          backgroundImage: `url('/Images/car1.jpg')`,
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
       {customAlert && (
         <div className="fixed top-0 left-0 w-full h-full flex items-center justify-center z-50">
           <div
@@ -153,7 +156,8 @@ const RemoveProductPage = () => {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

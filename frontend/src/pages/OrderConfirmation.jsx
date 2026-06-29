@@ -1,22 +1,63 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
-import { useCart } from "@/context/CartContext.jsx";
+import { useCart } from "@/hooks/useCart";
 
 export default function OrderConfirmation() {
   const navigate = useNavigate();
   const { clearCart } = useCart();
+  const [searchParams] = useSearchParams();
   const [orderDetails, setOrderDetails] = useState(null);
+
+  // Set by the JazzCash callback redirect: "success" | "failed" (absent for COD).
+  const paymentStatus = searchParams.get("payment");
+  const paymentFailed = paymentStatus === "failed";
 
   useEffect(() => {
     const storedOrder = JSON.parse(localStorage.getItem("orderDetails"));
     if (storedOrder) {
       setOrderDetails(storedOrder);
+    }
+    // Keep the cart on a failed online payment so the customer can retry.
+    if (!paymentFailed) {
       localStorage.removeItem("orderDetails");
       clearCart();
     }
-  }, [clearCart]);
+  }, [clearCart, paymentFailed]);
+
+  if (paymentFailed) {
+    return (
+      <>
+        <Navbar />
+        <div className="flex min-h-[70vh] items-center justify-center bg-black px-6 text-center text-white">
+          <div className="mx-auto max-w-md rounded-lg border border-red-800 bg-gray-900 p-8">
+            <h1 className="mb-3 text-3xl font-bold text-red-400">Payment Failed</h1>
+            <p className="text-gray-300">
+              Your payment could not be completed
+              {orderDetails?._id ? ` for order #${orderDetails._id}` : ""}. No amount was charged.
+              You can try again or choose Cash on Delivery.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <Link
+                to="/checkout"
+                className="rounded-xl bg-red-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-red-500"
+              >
+                Try Again
+              </Link>
+              <Link
+                to="/orders"
+                className="rounded-xl border border-gray-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-gray-800"
+              >
+                View Orders
+              </Link>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </>
+    );
+  }
 
   if (!orderDetails) {
     return (

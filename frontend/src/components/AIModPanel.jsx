@@ -52,28 +52,10 @@ function LoadingSkeleton() {
         <div className="h-full w-1/2 rounded-full bg-gradient-to-r from-white/5 to-white/15 animate-pulse" />
       </div>
       <div className="space-y-2 pt-1">
-        <SkeletonLine w="3/4" h="3.5" />
-        <SkeletonLine w="1/3" h="2" />
-        <SkeletonLine w="full" h="2" />
-        <SkeletonLine w="5/6" h="2" />
-      </div>
-      <div className="flex gap-3 rounded-xl border border-white/8 bg-white/5 px-3 py-2.5">
-        <div className="space-y-1">
-          <SkeletonLine w="12" h="2" />
-          <SkeletonLine w="20" h="4" />
-        </div>
-        <div className="mx-2 w-px bg-white/10" />
-        <div className="space-y-1">
-          <SkeletonLine w="8" h="2" />
-          <SkeletonLine w="14" h="3" />
-        </div>
-      </div>
-      <div className="space-y-1.5 pt-1">
-        <SkeletonLine w="16" h="2" />
-        {[1, 2, 3].map(i => (
+        {[1, 2, 3, 4].map(i => (
           <div key={i} className="flex items-center justify-between">
-            <SkeletonLine w="40" h="2.5" />
-            <SkeletonLine w="12" h="4" />
+            <SkeletonLine w="40" h="3" />
+            <SkeletonLine w="16" h="3" />
           </div>
         ))}
       </div>
@@ -135,6 +117,83 @@ function Divider() {
   return <div className="h-px w-full bg-white/8" />;
 }
 
+function BuildItem({ rec, index, isApplied, isDismissed, onApply, onDismiss }) {
+  const priceLabel = rec.price_pkr ? `Rs ${rec.price_pkr.toLocaleString()}` : "—";
+  const live = rec.is_live_listing;
+  const canApply = !!rec.three_js_change;
+
+  return (
+    <div
+      className={`rounded-xl border px-3 py-2.5 transition-all ${
+        isApplied
+          ? "border-emerald-500/30 bg-emerald-500/5"
+          : isDismissed
+          ? "border-white/5 bg-white/[0.01] opacity-50"
+          : "border-white/10 bg-white/[0.03] hover:border-white/20"
+      }`}
+    >
+      <div className="flex items-start gap-2.5">
+        <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md bg-white/8 text-[10px] font-bold text-gray-300">
+          {index + 1}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs font-bold leading-snug text-white">{rec.part_name}</p>
+            <span className="mt-0.5 shrink-0 rounded-full border border-white/12 bg-white/5 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest text-gray-400">
+              {rec.part_category?.replace(/_/g, " ")}
+            </span>
+          </div>
+          {rec.reason && (
+            <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{rec.reason}</p>
+          )}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-white">{priceLabel}</span>
+              {live && (
+                <span className="flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/8 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest text-emerald-400">
+                  <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-emerald-400" />
+                  Live
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5">
+              {rec.product_id && (
+                <Link
+                  to={`/productdetail/${rec.product_id}`}
+                  className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  View
+                </Link>
+              )}
+              {!isDismissed && !isApplied && (
+                <button
+                  onClick={onDismiss}
+                  className="rounded-md border border-white/8 px-2 py-1 text-[10px] font-semibold text-gray-500 transition-colors hover:border-white/20 hover:text-gray-300"
+                >
+                  Skip
+                </button>
+              )}
+              <button
+                onClick={onApply}
+                disabled={isApplied || !canApply}
+                className={`rounded-md px-2.5 py-1 text-[10px] font-bold transition-all ${
+                  isApplied
+                    ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
+                    : !canApply
+                    ? "border border-white/8 bg-white/5 text-gray-600 cursor-not-allowed"
+                    : "border border-red-500/35 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                }`}
+              >
+                {isApplied ? "✓ Applied" : "Apply"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AIModPanel({
   carMake,
   carModel,
@@ -144,15 +203,22 @@ export default function AIModPanel({
   selectedPartCategories,
   onPartApplied,
   carModelRef,
+  paintMaterials,
 }) {
   const [style, setStyle] = useState("Sport");
   const [budget, setBudget] = useState("");
-  const [applyState, setApplyState] = useState("idle"); // idle | applied
+  const [appliedIds, setAppliedIds] = useState(() => new Set());
+  const [dismissedIds, setDismissedIds] = useState(() => new Set());
 
-  const { getRecommendation, applyToModel, loading, error, lastRecommendation } = useCarAI();
+  const { getRecommendation, applyToModel, trackEvent, loading, error, lastRecommendation } = useCarAI();
+
+  // Reset per-item state whenever a new recommendation arrives.
+  useEffect(() => {
+    setAppliedIds(new Set());
+    setDismissedIds(new Set());
+  }, [lastRecommendation?.recommendation_id]);
 
   const handleGetRecommendation = async () => {
-    setApplyState("idle");
     await getRecommendation({
       carMake,
       carModel,
@@ -165,17 +231,55 @@ export default function AIModPanel({
     });
   };
 
-  const handleApply = () => {
-    const change = lastRecommendation?.recommendation?.three_js_change;
-    if (!change || !carModelRef) return;
-    applyToModel(carModelRef, change);
-    setApplyState("applied");
-    onPartApplied?.(lastRecommendation.recommendation);
+  const itemKey = (rec, idx) => rec.product_id || `${rec.part_category}-${idx}`;
+
+  const handleApply = (rec, idx) => {
+    const key = itemKey(rec, idx);
+    if (rec.three_js_change && carModelRef) {
+      applyToModel(carModelRef, rec.three_js_change, paintMaterials);
+    }
+    setAppliedIds(prev => new Set(prev).add(key));
+    onPartApplied?.(rec);
+    trackEvent({
+      recommendationId: lastRecommendation?.recommendation_id,
+      event: "applied",
+      productId: rec.product_id,
+      carMake,
+      carModel,
+      buildStyle: lastRecommendation?.build_style ?? style,
+    });
   };
 
-  const rec = lastRecommendation?.recommendation;
+  const handleDismiss = (rec, idx) => {
+    const key = itemKey(rec, idx);
+    setDismissedIds(prev => new Set(prev).add(key));
+    trackEvent({
+      recommendationId: lastRecommendation?.recommendation_id,
+      event: "dismissed",
+      productId: rec.product_id,
+      carMake,
+      carModel,
+      buildStyle: lastRecommendation?.build_style ?? style,
+    });
+  };
+
+  const handleApplyAll = () => {
+    recommendations.forEach((rec, idx) => {
+      const key = itemKey(rec, idx);
+      if (appliedIds.has(key) || dismissedIds.has(key)) return;
+      handleApply(rec, idx);
+    });
+  };
+
+  const recommendations = lastRecommendation?.recommendations ?? [];
+  const nextSuggestions = lastRecommendation?.next_3_suggestions ?? [];
   const score = lastRecommendation?.build_score ?? 0;
   const compatOk = lastRecommendation?.compatibility_ok !== false;
+  const totalCost = lastRecommendation?.total_cost_pkr ?? 0;
+  const appliedCount = appliedIds.size;
+  const pendingCount = recommendations.filter(
+    (r, i) => !appliedIds.has(itemKey(r, i)) && !dismissedIds.has(itemKey(r, i))
+  ).length;
 
   return (
     <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -191,7 +295,7 @@ export default function AIModPanel({
         </div>
         <div>
           <h4 className="text-xs font-bold uppercase tracking-[0.18em] text-white">AI Recommendations</h4>
-          <p className="text-[10px] text-gray-500">Powered by Gemma 3 · Live inventory match</p>
+          <p className="text-[10px] text-gray-500">Full build · Live inventory</p>
         </div>
       </div>
 
@@ -240,14 +344,14 @@ export default function AIModPanel({
         {loading ? (
           <>
             <Spinner size={15} />
-            <span>Analyzing your build…</span>
+            <span>Building your full kit…</span>
           </>
         ) : (
           <>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            Get AI Recommendation
+            {recommendations.length > 0 ? "Get a New Build" : "Get AI Build"}
           </>
         )}
       </button>
@@ -277,7 +381,7 @@ export default function AIModPanel({
       )}
 
       {/* ── Result Card ────────────────────────────────────────────────── */}
-      {!loading && lastRecommendation && rec && (
+      {!loading && lastRecommendation && recommendations.length > 0 && (
         <div className="space-y-0 overflow-hidden rounded-2xl border border-white/10 bg-black/40 backdrop-blur-sm">
 
           {/* Build Score Header */}
@@ -307,113 +411,79 @@ export default function AIModPanel({
               </div>
             </div>
             <ScoreBar score={score} />
-            <p className="mt-1.5 text-[10px] text-gray-600">Build Score</p>
-          </div>
-
-          <Divider />
-
-          {/* Part Name + Reason */}
-          <div className="px-4 py-3">
-            <div className="mb-0.5 flex items-start justify-between gap-2">
-              <p className="text-sm font-bold leading-snug text-white">{rec.part_name}</p>
-              <span className="mt-0.5 shrink-0 rounded-full border border-white/12 bg-white/5 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-gray-400">
-                {rec.part_category?.replace(/_/g, " ")}
+            <div className="mt-1.5 flex items-center justify-between text-[10px] text-gray-600">
+              <span>Build Score</span>
+              <span>
+                {appliedCount}/{recommendations.length} applied · Rs {totalCost.toLocaleString()}
               </span>
             </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-gray-400">{rec.reason}</p>
           </div>
 
           <Divider />
 
-          {/* Pricing row */}
-          <div className="grid grid-cols-3 divide-x divide-white/8 px-0">
-            <div className="px-4 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-600">Price</p>
-              <p className="mt-0.5 text-sm font-black text-white">
-                Rs {rec.price_pkr?.toLocaleString() ?? "—"}
-              </p>
+          {/* Build List */}
+          <div className="space-y-2 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <SectionLabel>Recommended Build</SectionLabel>
+              {pendingCount > 1 && (
+                <button
+                  onClick={handleApplyAll}
+                  className="rounded-md border border-red-500/35 bg-red-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-red-300 transition-colors hover:bg-red-500/20"
+                >
+                  Apply All ({pendingCount})
+                </button>
+              )}
             </div>
-            <div className="px-4 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-600">USD</p>
-              <p className="mt-0.5 text-sm font-bold text-gray-300">
-                ${rec.price_usd ?? "—"}
-              </p>
-            </div>
-            <div className="px-4 py-3">
-              <p className="text-[9px] font-semibold uppercase tracking-widest text-gray-600">Build Total</p>
-              <p className="mt-0.5 text-sm font-black text-white">
-                Rs {lastRecommendation.total_cost_pkr?.toLocaleString() ?? "—"}
-              </p>
-            </div>
+            {recommendations.map((rec, idx) => {
+              const key = itemKey(rec, idx);
+              return (
+                <BuildItem
+                  key={key}
+                  rec={rec}
+                  index={idx}
+                  isApplied={appliedIds.has(key)}
+                  isDismissed={dismissedIds.has(key)}
+                  onApply={() => handleApply(rec, idx)}
+                  onDismiss={() => handleDismiss(rec, idx)}
+                />
+              );
+            })}
           </div>
 
-          {/* Inventory Match */}
-          {rec.product_id && (
+          {/* Next suggestions — clickable */}
+          {nextSuggestions.length > 0 && (
             <>
               <Divider />
               <div className="px-4 py-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <SectionLabel>Inventory Match</SectionLabel>
-                  {rec.is_live_listing && (
-                    <span className="flex items-center gap-1 rounded-full border border-emerald-500/25 bg-emerald-500/8 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-emerald-400">
-                      <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                      Live
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm font-semibold text-white">
-                  {rec.source_name || "Catalog Product"}
-                </p>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  {rec.stock_quantity > 0
-                    ? `${rec.stock_quantity} units in stock`
-                    : "Stock check required"}
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <Link
-                    to={`/productdetail/${rec.product_id}`}
-                    className="flex-1 rounded-xl border border-red-500/35 bg-red-500/10 py-2 text-center text-xs font-bold text-red-300 transition-colors hover:bg-red-500/20"
-                  >
-                    View Product
-                  </Link>
-                  {rec.source_url && (
-                    <a
-                      href={rec.source_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-gray-300 transition-colors hover:bg-white/10 hover:text-white"
-                    >
-                      Source
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                        <polyline points="15 3 21 3 21 9" />
-                        <line x1="10" y1="14" x2="21" y2="3" />
-                      </svg>
-                    </a>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Next suggestions */}
-          {lastRecommendation.next_3_suggestions?.length > 0 && (
-            <>
-              <Divider />
-              <div className="px-4 py-3">
-                <SectionLabel>Up Next</SectionLabel>
-                <div className="space-y-2">
-                  {lastRecommendation.next_3_suggestions.map((s, i) => {
+                <SectionLabel>Consider Next</SectionLabel>
+                <div className="space-y-1.5">
+                  {nextSuggestions.map((s, i) => {
                     const ic = IMPACT_COLOR[s.impact] ?? IMPACT_COLOR.Low;
-                    return (
-                      <div key={i} className="flex items-center justify-between gap-3">
+                    const content = (
+                      <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ic.dot}`} />
                           <span className="truncate text-xs text-gray-300">{s.part}</span>
+                          {s.price_pkr && (
+                            <span className="text-[10px] text-gray-500">Rs {s.price_pkr.toLocaleString()}</span>
+                          )}
                         </div>
                         <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest ${ic.badge}`}>
                           {s.impact}
                         </span>
+                      </div>
+                    );
+                    return s.product_id ? (
+                      <Link
+                        key={i}
+                        to={`/productdetail/${s.product_id}`}
+                        className="block rounded-lg border border-transparent px-2 py-1.5 transition-colors hover:border-white/10 hover:bg-white/5"
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      <div key={i} className="px-2 py-1.5">
+                        {content}
                       </div>
                     );
                   })}
@@ -422,7 +492,7 @@ export default function AIModPanel({
             </>
           )}
 
-          {/* Compatibility warning */}
+          {/* Compatibility / budget warning */}
           {lastRecommendation.warning &&
             lastRecommendation.warning !== "null" &&
             lastRecommendation.warning !== null && (
@@ -440,38 +510,6 @@ export default function AIModPanel({
                 </div>
               </>
             )}
-
-          {/* Apply Button */}
-          <div className="px-4 pb-4 pt-3">
-            <button
-              onClick={handleApply}
-              disabled={applyState === "applied" || !rec?.three_js_change}
-              className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold tracking-wide transition-all ${
-                applyState === "applied"
-                  ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
-                  : !rec?.three_js_change
-                  ? "border border-white/8 bg-white/5 text-gray-600 cursor-not-allowed"
-                  : "border border-red-500/35 bg-transparent text-red-400 hover:-translate-y-0.5 hover:border-red-500/55 hover:bg-red-500/10"
-              }`}
-            >
-              {applyState === "applied" ? (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  Applied to 3D Model
-                </>
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                    <circle cx="12" cy="12" r="10" />
-                    <polygon points="10 8 16 12 10 16 10 8" />
-                  </svg>
-                  Apply to 3D Model
-                </>
-              )}
-            </button>
-          </div>
         </div>
       )}
     </div>

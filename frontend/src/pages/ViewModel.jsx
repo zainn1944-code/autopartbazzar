@@ -14,6 +14,29 @@ const STATIC_CAR_CATALOG = {
       sourceUrl: "https://sketchfab.com/3d-models/honda-civic-ff844e296f214e709c0d0691d031c68b",
     },
   ],
+  Toyota: [
+    {
+      name: "Hilux",
+      car: "Hilux",
+      modelYear: 2026,
+      modelUrl: "/models/toyota/hilux.glb",
+      sourceUrl: "https://poly.pizza/m/8-0nFArehjd",
+    },
+    {
+      name: "Corolla",
+      car: "Corolla",
+      modelYear: 2017,
+      modelUrl: "/models/toyota/corolla.glb",
+      sourceUrl: "https://sketchfab.com/3d-models/toyota-corolla-e170-2017",
+    },
+  ],
+};
+
+// Only these make → model combos are offered in the configurator picker.
+// Anything the backend catalog returns outside this list is filtered out.
+const ALLOWED_CARS = {
+  Honda: ["Civic"],
+  Toyota: ["Hilux", "Corolla"],
 };
 
 function buildSourceLookup() {
@@ -56,6 +79,8 @@ export default function CarSearch() {
         const grouped = {};
 
         for (const row of data.cars || []) {
+          const allowedCars = ALLOWED_CARS[row.make];
+          if (!allowedCars || !allowedCars.includes(row.car)) continue;
           const fallback = sourceLookup.get(`${row.make}|${row.car}`);
           const entry = {
             key: `${row.make}-${row.car}-${row.model || "catalog"}`,

@@ -141,6 +141,43 @@ async def trigger_live_sync(_: object = Depends(require_admin_user)):
     return await fetch_and_store_daily_parts(triggered_by="admin-api")
 
 
+@router.get("/categories")
+async def list_categories(db: AsyncSession = Depends(get_db)):
+    """Category names with live product counts + a representative product image —
+    powers the home 'Shop by Category' cards. Ordered by count (largest first).
+    Declared BEFORE /{product_ref} so the literal path isn't swallowed by the
+    catch-all product lookup."""
+    rows = (
+        await db.execute(
+            select(Product.category, func.count())
+            .where(Product.category.is_not(None), Product.category != "")
+            .group_by(Product.category)
+            .order_by(func.count().desc())
+        )
+    ).all()
+
+    # First non-empty product image per category → card thumbnail.
+    image_rows = (
+        await db.execute(
+            select(Product.category, Product.image_url)
+            .where(
+                Product.category.is_not(None),
+                Product.image_url.is_not(None),
+                Product.image_url != "",
+            )
+            .order_by(Product.id.asc())
+        )
+    ).all()
+    sample_image: dict[str, str] = {}
+    for category, image_url in image_rows:
+        sample_image.setdefault(category, image_url)
+
+    return [
+        {"name": name, "count": count, "image": sample_image.get(name)}
+        for name, count in rows
+    ]
+
+
 @router.get("/{product_ref}")
 async def get_product(product_ref: str, db: AsyncSession = Depends(get_db)):
     p = await _get_product_by_ref(db, product_ref)

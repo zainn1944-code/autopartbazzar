@@ -5,6 +5,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     phone: str = Field(min_length=1)
     password: str = Field(min_length=1)
+    name: str | None = None
 
 
 class UserRead(BaseModel):

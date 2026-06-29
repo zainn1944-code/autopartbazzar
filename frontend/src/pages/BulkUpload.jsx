@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "@/api/axiosInstance";
 import { useAuth } from "@/hooks/useAuth";
-import Navbar from "@/components/ui/navbar.jsx";
+import AdminHeader from "@/components/ui/AdminHeader.jsx";
 
 const CSV_TEMPLATE = `name,price,category,make,city,sale,free_shipping,stock_quantity,original_price,description
 Brake Pads Set,2500,Brakes,Toyota,Karachi,false,true,10,3000,High quality brake pads
@@ -66,7 +66,7 @@ export default function BulkUpload() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Navbar />
+      <AdminHeader />
       <div className="max-w-2xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Bulk Product Upload</h1>
         <p className="text-gray-500 dark:text-gray-400 mb-6">

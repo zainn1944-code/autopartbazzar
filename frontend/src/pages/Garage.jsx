@@ -1,12 +1,14 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Lightbulb } from "lucide-react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Bounds, ContactShadows, Environment, OrbitControls, SpotLight, useGLTF } from "@react-three/drei";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
-import { useCart } from "@/context/CartContext.jsx";
+import { useCart } from "@/hooks/useCart";
+import { useSavedBuilds } from "@/hooks/useSavedBuilds.js";
 import AIModPanel from "@/components/AIModPanel.jsx";
 import {
   makeCenteredGroup,
@@ -18,12 +20,21 @@ import {
   PAINT_SWATCHES,
   PAINT_FINISHES,
   WINDOW_TINTS,
+  RIM_COLORS,
+  CALIPER_COLORS,
+  NEON_COLORS,
+  ACCENT_COLORS,
   DEFAULT_BODY_PAINT,
   applyBodyPaint,
   applyWindowTint,
+  applyRimColor,
+  applyCaliperColor,
+  applyAccentColor,
+  detectTuneCapabilities,
   removeAttachedParts,
   enhanceTailLightEmissive,
   getCustomizationProfile,
+  restyleLights,
 } from "@/lib/carCustomization.js";
 
 // ─── Hardcoded catalogue ──────────────────────────────────────────────────────
@@ -43,9 +54,9 @@ const BASE_MODS = {
     { name: "Ducktail Spoiler", price: 1200, model: "/models/honda/civicfbumper.glb" },
   ],
   "Tyres": [
-    { name: "Sport Tyres",  price: 1200, model: "/models/shared/tire.glb" },
-    { name: "Alloy Rims",   price: 1400, model: "/models/shared/tire1.glb" },
-    { name: "Track Slicks", price: 2200, model: "/models/shared/tire.glb" },
+    { name: "Sport Tyres",   price: 1200, model: "/models/shared/tire.glb", sizeMul: 1.0 },
+    { name: "Off-Road Tyres",price: 1400, model: "/models/shared/tire.glb", sizeMul: 1.08 },
+    { name: "Track Slicks",  price: 2200, model: "/models/shared/tire.glb", sizeMul: 0.95 },
   ],
   "Front Lights": [
     { name: "LED Headlights", price: 1800, model: "/models/honda/civicrightlight.glb" },
@@ -223,25 +234,87 @@ function RearLightsMod({ carModel, carBox, profile, path }) {
  * Strategy: name-based first, then position-proximity fallback if nothing matched.
  * Returns the list of hidden objects so the caller can restore them on cleanup.
  */
-// Keywords that identify wheel/tire meshes to hide when replacement is applied
-const WHEEL_KEYWORDS = ["tire", "tyre", "newtire", "rim", "hub", "spoke", "rotor", "brake_disc", "caliper", "alloy_wheel"];
+// Keywords that identify wheel/tire meshes to hide when replacement is applied.
+// NOTE: "rim" is intentionally NOT here — it is matched with a left-boundary
+// check in isWheelMesh so it never fires on words like "p-rim-ary" / "t-rim".
+const WHEEL_KEYWORDS = ["tire", "tyre", "newtire", "hub", "spoke", "rotor", "brake_disc", "caliper", "alloy_wheel"];
 
 // Names that contain wheel keywords but must NOT be hidden (interior parts, body panels)
 const WHEEL_EXCLUDE = ["steeringwheel", "steering_wheel", "wheelwell", "wheel_well", "wheelarch", "wheel_arch"];
+
+/**
+ * True when a mesh name denotes an actual wheel/tyre/rim — and NOT a body panel.
+ * GTA-style models group wheels under nodes named "wheel_*", so real wheel meshes
+ * START WITH "wheel"; body panels merely carry a "wheel_rf" texture-atlas tag
+ * later in the name and must be ignored. "rim" uses a left-boundary check so it
+ * matches "rim"/"wheel_rim" but not "primary"/"trim".
+ */
+function isWheelMesh(name) {
+  const n = (name || "").toLowerCase();
+  if (WHEEL_EXCLUDE.some(ex => n.includes(ex))) return false;
+  if (n.startsWith("wheel")) return true;
+  if (/(^|[^a-z])rim/.test(n)) return true;
+  return WHEEL_KEYWORDS.some(kw => n.includes(kw));
+}
+
+/**
+ * Checks the mesh's name AND its parent node's name for wheel identity.
+ * Sketchfab exports (e.g. the Corolla) leave mesh names as "Object_X" and put
+ * the descriptive label on the parent: "e180_wheel.001_51". isWheelMesh alone
+ * misses this because the name starts with "e180_", not "wheel". So we also
+ * check whether the parent name CONTAINS "_wheel" or "wheel_" as a substring.
+ */
+function meshIsWheel(child) {
+  if (isWheelMesh(child.name)) return true;
+  const pn = (child.parent?.name || "").toLowerCase();
+  if (!pn) return false;
+  // Never flag wheel arch / steering wheel / well panels via parent name either.
+  if (WHEEL_EXCLUDE.some(ex => pn.includes(ex))) return false;
+  if (isWheelMesh(pn)) return true;
+  // "e180_wheel*" style: has prefix before "_wheel" so startsWith misses it.
+  if (pn.includes("_wheel") || pn.includes("wheel_")) return true;
+  return false;
+}
+
+function meshCanDriveTyrePlacement(child) {
+  const name = (child.name || "").toLowerCase();
+  const parentName = (child.parent?.name || "").toLowerCase();
+  const text = `${name} ${parentName}`;
+  if (WHEEL_EXCLUDE.some(ex => text.includes(ex))) return false;
+  return (
+    text.includes("wheel") ||
+    text.includes("tire") ||
+    text.includes("tyre") ||
+    /(^|[^a-z])rim/.test(text)
+  );
+}
 
 function hideOriginalWheels(carModel, wheelPositions) {
   const hidden = [];
 
   // ── Pass 1: hide by name ──────────────────────────────────────────────────
   carModel.traverse(child => {
-    const name = (child.name || "").toLowerCase();
-    // Skip steering wheel, wheel arch, and other false-positive matches
-    if (WHEEL_EXCLUDE.some(ex => name.includes(ex))) return;
-    if (WHEEL_KEYWORDS.some(kw => name.includes(kw))) {
+    if (!child.isMesh) return;
+    if (meshIsWheel(child)) {
       child.visible = false;
       hidden.push(child);
     }
   });
+
+  // ── Pass 1b: parent-name based hiding (Sketchfab/Corolla style) ──
+  if (hidden.length === 0) {
+    carModel.traverse(child => {
+      if (!child.isMesh) return;
+      const pn = (child.parent?.name || "").toLowerCase();
+      if (
+        pn.includes("wheel") &&
+        !WHEEL_EXCLUDE.some(ex => pn.includes(ex))
+      ) {
+        child.visible = false;
+        hidden.push(child);
+      }
+    });
+  }
 
   // ── Pass 2: position proximity (fallback when GLB uses generic names) ─────
   // Only run if name-pass found nothing — avoids accidentally hiding body panels.
@@ -270,34 +343,53 @@ function hideOriginalWheels(carModel, wheelPositions) {
 }
 
 // ─── Tyre modification — lives inside Canvas ──────────────────────────────────
-function TyreMod({ carModel, carBox, profile, path }) {
+function TyreMod({ carModel, carBox, profile, path, sizeMul = 1 }) {
   const { scene } = useGLTF(path);
   const { invalidate } = useThree();
 
   useEffect(() => {
     if (!carModel || !scene) return;
 
-    const tp     = profile.tires;
-    const useAlt = path.includes("tire1.glb");
-    const rotArr = useAlt ? tp.altRotation : tp.defaultRotation;
+    const tp = profile.tires;
 
     // ── Step 1: Update world matrices so setFromObject is accurate ────────────
     carModel.updateMatrixWorld(true);
 
-    // ── Step 2: Scan the GLB for original tire meshes (name-based) ───────────
-    // Collect world-space center + diameter of every tire-named mesh
-    const TIRE_KW = ["newtire", "tire", "tyre"];
+    // ── Measure the replacement tyre model so it fits ANY car automatically ───
+    // Its axle runs along its THINNEST dimension; the round face spans the other
+    // two. We rotate the tyre so that axle points along the car's width axis, and
+    // scale it to the real wheel diameter — no per-model guessing required.
+    scene.updateMatrixWorld(true);
+    const tyreSize = new THREE.Box3().setFromObject(scene).getSize(new THREE.Vector3());
+    const tyreDims = [["x", tyreSize.x], ["y", tyreSize.y], ["z", tyreSize.z]].sort((a, b) => a[1] - b[1]);
+    const tyreAxle = tyreDims[0][0];                                  // thinnest = axle
+    const NATURAL_DIAM = (tyreDims[1][1] + tyreDims[2][1]) / 2 || 0.95;
+
+    // Car width axis (left↔right) = shorter horizontal dimension; axle aligns to it.
+    const carW = carBox ? carBox.max.x - carBox.min.x : 2;
+    const carD = carBox ? carBox.max.z - carBox.min.z : 4;
+    const widthAxis = carW <= carD ? "x" : "z";
+
+    // Y-rotation that brings the tyre's horizontal axle onto the width axis.
+    let yRot = 0;
+    if ((tyreAxle === "x" && widthAxis === "z") || (tyreAxle === "z" && widthAxis === "x")) {
+      yRot = Math.PI / 2;
+    }
+    const rotArr = [0, yRot, 0];
+
+    // ── Step 2: Scan the GLB for original wheel/tire meshes (name-based) ──────
+    // Collect car-local center + diameter of every real wheel mesh
     const rawEntries = [];
     carModel.traverse(child => {
       if (!child.isMesh) return;
-      const n = (child.name || "").toLowerCase();
-      if (WHEEL_EXCLUDE.some(ex => n.includes(ex))) return;
-      if (!TIRE_KW.some(kw => n.includes(kw))) return;
+      if (!meshIsWheel(child) || !meshCanDriveTyrePlacement(child)) return;
       const box  = new THREE.Box3().setFromObject(child);
       const size = box.getSize(new THREE.Vector3());
       const diam = Math.max(size.x, size.y, size.z);
       if (diam < 0.05) return; // ignore tiny fragments
-      rawEntries.push({ center: box.getCenter(new THREE.Vector3()), diameter: diam });
+      const center = box.getCenter(new THREE.Vector3());
+      carModel.worldToLocal(center);
+      rawEntries.push({ center, diameter: diam });
     });
 
     // ── Step 3: Cluster nearby entries → one cluster per physical wheel ───────
@@ -318,26 +410,44 @@ function TyreMod({ carModel, carBox, profile, path }) {
         }
       });
       const avgC = grp.reduce((a, e) => a.add(e.center.clone()), new THREE.Vector3()).divideScalar(grp.length);
-      const avgD = grp.reduce((s, e) => s + e.diameter, 0) / grp.length;
-      clusters.push({ center: avgC, diameter: avgD });
+      const diams = grp.map(e => e.diameter).sort((a, b) => a - b);
+      const maxD  = diams[diams.length - 1];
+      clusters.push({ center: avgC, diameter: maxD });
     });
 
-    // ── Step 4: Choose positions and scale ────────────────────────────────────
-    const NATURAL_DIAM = 0.95; // tire.glb natural diameter in Three.js units
+    // ── Step 4: Choose positions and scale (NATURAL_DIAM measured above) ──────
     let positions;
     let sf;
 
-    if (clusters.length === 4) {
-      // Use the EXACT world positions (and exact diameter) of the original tires
-      positions = clusters.map(({ center: c }) => ({ x: c.x, y: c.y, z: c.z }));
-      const avgD = clusters.reduce((s, c) => s + c.diameter, 0) / clusters.length;
-      sf = avgD / NATURAL_DIAM;
+    const carH  = carBox ? carBox.max.y - carBox.min.y : 1.45;
+
+    if (clusters.length >= 4) {
+      const widthCoord = (cluster) => (widthAxis === "x" ? cluster.center.x : cluster.center.z);
+      const lengthCoord = (cluster) => (widthAxis === "x" ? cluster.center.z : cluster.center.x);
+      const sorted = [...clusters].sort((a, b) => Math.abs(lengthCoord(b)) - Math.abs(lengthCoord(a)));
+      const physicalWheels = sorted.slice(0, 4).sort((a, b) => {
+        const lengthDelta = lengthCoord(b) - lengthCoord(a);
+        return Math.abs(lengthDelta) > 0.001 ? lengthDelta : widthCoord(b) - widthCoord(a);
+      });
+
+      positions = physicalWheels.map(cluster => ({
+        x: cluster.center.x,
+        y: cluster.center.y,
+        z: cluster.center.z,
+      }));
+
+      const targetDiam = physicalWheels.reduce(
+        (max, cluster) => Math.max(max, cluster.diameter),
+        0
+      ) || carH * 0.28;
+      sf = (targetDiam * 1.02 * sizeMul) / NATURAL_DIAM;
     } else {
-      // Fallback: derive from car bounding box
-      const carH   = carBox ? carBox.max.y - carBox.min.y : 1.45;
-      const wheelY = carH * 0.22;
-      positions = carBox ? adaptiveWheelPositions(carBox, wheelY) : tp.defaultPositions;
-      sf = (carH * 0.44) / NATURAL_DIAM;
+      const fallbackY = tp.defaultPositions?.[0]?.y ?? carH * 0.14;
+      const fallbackPositions = carBox ? adaptiveWheelPositions(carBox, fallbackY) : tp.defaultPositions;
+      positions = fallbackPositions.map(pos => ({ x: pos.x, y: pos.y, z: pos.z }));
+
+      const fallbackDiam = carH * 0.28;
+      sf = (fallbackDiam * sizeMul) / NATURAL_DIAM;
     }
 
     // ── Step 5: Hide original wheels ──────────────────────────────────────────
@@ -353,10 +463,19 @@ function TyreMod({ carModel, carBox, profile, path }) {
     tireClone.scale.set(sf, sf, sf);
     const tireGroup = makeCenteredGroup(tireClone);
 
+    // Wheels on the far side of the car must be mirrored (extra 180° about Y)
+    // so the rim dish faces OUTWARD on both sides — otherwise one side looks
+    // correct and the other looks inside-out. The split point is the midpoint of
+    // the wheels along the width axis (same coordinate space as the positions).
+    const axisVals = positions.map(p => (widthAxis === "x" ? p.x : p.z));
+    const axisMid  = (Math.min(...axisVals) + Math.max(...axisVals)) / 2;
     positions.forEach((pos, i) => {
       const t = tireGroup.clone(true);
       t.position.set(pos.x, pos.y, pos.z);
-      t.rotation.set(rotArr[0], rotArr[1], rotArr[2]);
+      t.userData.groundY = pos.y; // save ground level for suspension
+      const sideCoord = widthAxis === "x" ? pos.x : pos.z;
+      const flip = sideCoord < axisMid ? Math.PI : 0;
+      t.rotation.set(rotArr[0], rotArr[1] + flip, rotArr[2]);
       t.name = `tire_${i}`;
       carModel.add(t);
     });
@@ -370,7 +489,7 @@ function TyreMod({ carModel, carBox, profile, path }) {
       rem.forEach(c => c.parent?.remove(c));
       invalidate();
     };
-  }, [carModel, carBox, scene, path, profile, invalidate]);
+  }, [carModel, carBox, scene, path, sizeMul, profile, invalidate]);
 
   return null;
 }
@@ -447,11 +566,212 @@ function FrontLightsMod({ carModel, carBox, profile, path }) {
   return null;
 }
 
+// ─── Light restyle — for complete models that keep their own light geometry ────
+// Recolours the car's OWN head/tail lights instead of adding foreign light parts.
+function LightRestyle({ carModel, frontMod, rearMod, paintMaterials, frontEnabled, rearEnabled }) {
+  const { invalidate } = useThree();
+
+  useEffect(() => {
+    if (!carModel) return;
+    const opts = { paintMaterials };
+    const activeFront = frontEnabled ? (frontMod ?? "__default__") : null;
+    const activeRear  = rearEnabled  ? (rearMod  ?? "__default__") : null;
+    restyleLights(carModel, activeFront, activeRear, opts);
+    invalidate();
+    return () => {
+      restyleLights(carModel, null, null, opts);
+      invalidate();
+    };
+  }, [carModel, frontMod, rearMod, paintMaterials, frontEnabled, rearEnabled, invalidate]);
+
+  return null;
+}
+
+// ─── Tuning effects driver — re-applies rim/caliper/accent colors whenever
+//     the relevant tuning state changes.
+function TuningEffects({ carModel, tuning }) {
+  const { invalidate } = useThree();
+
+  useEffect(() => {
+    if (!carModel) return;
+    applyRimColor(carModel, tuning.rimColor);
+    invalidate();
+  }, [carModel, tuning.rimColor, invalidate]);
+
+  useEffect(() => {
+    if (!carModel) return;
+    applyCaliperColor(carModel, tuning.caliperColor);
+    invalidate();
+  }, [carModel, tuning.caliperColor, invalidate]);
+
+  useEffect(() => {
+    if (!carModel) return;
+    applyAccentColor(carModel, "roof", tuning.roofAccent);
+    invalidate();
+  }, [carModel, tuning.roofAccent, invalidate]);
+
+  useEffect(() => {
+    if (!carModel) return;
+    applyAccentColor(carModel, "hood", tuning.hoodAccent);
+    invalidate();
+  }, [carModel, tuning.hoodAccent, invalidate]);
+
+  return null;
+}
+
+// ─── Neon underglow ──────────────────────────────────────────────────────────
+// Two layers: a thin emissive disc just under the car (acts like spill onto the
+// ground) and a soft point light to bounce real colored light onto the body.
+function NeonUnderglow({ carBox, presetKey, pulse }) {
+  const meshRef = useRef(null);
+  const lightRef = useRef(null);
+  const preset = NEON_COLORS[presetKey] ?? NEON_COLORS.off;
+
+  useFrame((state) => {
+    if (!pulse) return;
+    const t = (Math.sin(state.clock.elapsedTime * 2.2) + 1) / 2; // 0..1
+    const k = 0.55 + 0.45 * t;
+    if (meshRef.current) meshRef.current.material.opacity = 0.55 * k;
+    if (lightRef.current) lightRef.current.intensity = 6 * k;
+  });
+
+  if (preset.hex == null || !carBox) return null;
+
+  const w = carBox.max.x - carBox.min.x;
+  const d = carBox.max.z - carBox.min.z;
+  const radius = Math.max(w, d) * 0.62;
+
+  return (
+    <group position={[0, 0.02, 0]}>
+      <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[radius * 0.55, radius, 64]} />
+        <meshBasicMaterial
+          color={preset.hex}
+          transparent
+          opacity={0.55}
+          toneMapped={false}
+          depthWrite={false}
+        />
+      </mesh>
+      <pointLight
+        ref={lightRef}
+        color={preset.hex}
+        intensity={6}
+        distance={radius * 2.6}
+        decay={1.8}
+        position={[0, 0.18, 0]}
+      />
+    </group>
+  );
+}
+
 // ─── Main 3D scene ────────────────────────────────────────────────────────────
+function VehicleLightAura({ carBox, frontEnabled, rearEnabled, frontMod, rearMod, performanceMode }) {
+  if ((!frontEnabled && !rearEnabled) || !carBox) return null;
+
+  const width = carBox.max.x - carBox.min.x;
+  const depth = carBox.max.z - carBox.min.z;
+  const height = carBox.max.y - carBox.min.y;
+  const longIsZ = depth >= width;
+  const halfWidth = (longIsZ ? width : depth) / 2 || 1;
+  const halfLength = (longIsZ ? depth : width) / 2 || 2;
+  const side = Math.max(halfWidth * 0.42, 0.35);
+  const lampY = Math.max(height * 0.38, 0.38);
+  const front = halfLength * 0.96;
+  const rear = -halfLength * 0.96;
+  const pos = (lateral, y, longitudinal) =>
+    longIsZ ? [lateral, y, longitudinal] : [longitudinal, y, lateral];
+
+  const frontText = frontMod || "";
+  const rearText = rearMod || "";
+  // Match restyleLights: amber halogen → crisp white LED → strong blue xenon,
+  // so the bounced light + halo agree with the colour baked into the lens mesh.
+  const isXenon = /xenon/i.test(frontText);
+  const isLed   = /led/i.test(frontText);
+  const headColor = isXenon ? "#3a93ff" : isLed ? "#ffffff" : "#ffb24d";
+  // Beyond colour, give each type its own brightness so the swap reads as clearly
+  // as a tyre swap: LED = punchy bright white, Xenon = moodier saturated blue,
+  // halogen = soft warm. Brightness + colour together make the difference obvious.
+  const headMul = isXenon ? 0.85 : isLed ? 1.25 : 0.7;
+  const tailColor = /smoke/i.test(rearText) ? "#9d1616" : "#ff2424";
+  const lightBoost = performanceMode ? 0.65 : 1;
+  const glowRadius = Math.max(halfWidth * 0.82, 0.7);
+
+  return (
+    <group>
+      {frontEnabled && [-side, side].map((x) => (
+        <group key={`head-${x}`} position={pos(x, lampY, front)}>
+          <pointLight
+            color={headColor}
+            intensity={18 * lightBoost * headMul}
+            distance={halfLength * 1.8}
+            decay={1.5}
+          />
+          <mesh>
+            <sphereGeometry args={[Math.max(0.06, height * 0.038), 18, 10]} />
+            <meshBasicMaterial color={headColor} transparent opacity={0.95} toneMapped={false} />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[Math.max(0.11, height * 0.07), 16, 10]} />
+            <meshBasicMaterial color={headColor} transparent opacity={0.28} toneMapped={false} depthWrite={false} blending={THREE.AdditiveBlending} />
+          </mesh>
+        </group>
+      ))}
+
+      {rearEnabled && [-side, side].map((x) => (
+        <group key={`tail-${x}`} position={pos(x, lampY * 0.95, rear)}>
+          <pointLight
+            color={tailColor}
+            intensity={9 * lightBoost}
+            distance={halfLength * 1.1}
+            decay={1.6}
+          />
+          <mesh>
+            <sphereGeometry args={[Math.max(0.055, height * 0.033), 18, 10]} />
+            <meshBasicMaterial color={tailColor} transparent opacity={0.9} toneMapped={false} />
+          </mesh>
+          <mesh>
+            <sphereGeometry args={[Math.max(0.1, height * 0.06), 16, 10]} />
+            <meshBasicMaterial color={tailColor} transparent opacity={0.25} toneMapped={false} depthWrite={false} blending={THREE.AdditiveBlending} />
+          </mesh>
+        </group>
+      ))}
+
+      {frontEnabled && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={pos(0, 0.028, front + halfLength * 0.16)}>
+          <circleGeometry args={[glowRadius, 48]} />
+          <meshBasicMaterial
+            color={headColor}
+            transparent
+            opacity={0.26}
+            toneMapped={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+      {rearEnabled && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={pos(0, 0.026, rear - halfLength * 0.08)}>
+          <circleGeometry args={[glowRadius * 0.75, 48]} />
+          <meshBasicMaterial
+            color={tailColor}
+            transparent
+            opacity={0.22}
+            toneMapped={false}
+            depthWrite={false}
+            blending={THREE.AdditiveBlending}
+          />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
 function CarScene({
   modelUrl, carMake, onModelLoaded, setLoadError,
   performanceMode, selectedColorHex, selectedParts,
   paintFinish, suspensionOffset, windowTint, cameraPreset,
+  tuning,
 }) {
   const { invalidate } = useThree();
   const [localCar, setLocalCar]       = useState(null);
@@ -467,10 +787,14 @@ function CarScene({
       decodeURIComponent(modelUrl),
       (gltf) => {
         const loadedCar = gltf.scene;
-        applyBodyPaint(loadedCar, DEFAULT_BODY_PAINT);
+        applyBodyPaint(loadedCar, DEFAULT_BODY_PAINT, "gloss", { onlyMaterials: profile.paintMaterials });
 
         if (profile.modelScale) {
           loadedCar.scale.set(...profile.modelScale);
+        }
+
+        if (profile.modelRotationY != null) {
+          loadedCar.rotation.y = profile.modelRotationY;
         }
 
         loadedCar.updateMatrixWorld(true);
@@ -500,16 +824,35 @@ function CarScene({
   // Apply colour / finish whenever either changes
   useEffect(() => {
     if (!localCar || !selectedColorHex) return;
-    applyBodyPaint(localCar, selectedColorHex, paintFinish ?? "gloss");
+    applyBodyPaint(localCar, selectedColorHex, paintFinish ?? "gloss", { onlyMaterials: profile.paintMaterials });
     invalidate();
-  }, [localCar, selectedColorHex, paintFinish, invalidate]);
+  }, [localCar, selectedColorHex, paintFinish, profile, invalidate]);
 
-  // Suspension height
   useEffect(() => {
-    if (!localCar) return;
-    localCar.position.y = suspensionOffset ?? 0;
+    if (!localCar || !localCarBox) return;
+
+    // Move the inner car mesh (child[0]) up — not the wrapper
+    const carMesh = localCar.children[0];
+    if (!carMesh) return;
+
+    // Original position was: -scaledBox.min.y (floor align)
+    // Suspension lifts body UP from that baseline
+    const baseline = -(localCarBox.min.y);
+    carMesh.position.y = baseline + (suspensionOffset ?? 0);
+
+    // Keep tyres on ground — find all tire_ objects in wrapper
+    // and counter-move them so they stay at ground level
+    localCar.traverse(child => {
+      if (child.name?.startsWith("tire_")) {
+        // Tyres are children of wrapper (localCar), not carMesh
+        // Their Y was set from cluster/carBox — keep it unchanged
+        // by subtracting the suspension offset back out
+        child.position.y = child.userData.groundY ?? child.position.y;
+      }
+    });
+
     invalidate();
-  }, [localCar, suspensionOffset, invalidate]);
+  }, [localCar, localCarBox, suspensionOffset, invalidate]);
 
   // Window tint
   useEffect(() => {
@@ -525,6 +868,11 @@ function CarScene({
     ? Math.max(localCarBox.max.x - localCarBox.min.x, localCarBox.max.z - localCarBox.min.z)
     : 4.5;
   const s = cl / 4.5; // scale factor relative to a standard 4.5m car
+  // Front and rear lights toggle independently. We still fall back to the old
+  // single `lightsOn` flag so saved builds from before the split keep working.
+  const masterOn  = tuning?.lightsOn ?? true;
+  const frontOn   = tuning?.frontLightsOn ?? masterOn;
+  const rearOn    = tuning?.rearLightsOn  ?? masterOn;
 
   return (
     <>
@@ -555,49 +903,76 @@ function CarScene({
       <directionalLight position={[0, s*1.5, s*10]} intensity={performanceMode ? 0.4 : 0.8} color="#fff8f0" />
       <ambientLight intensity={0.12} />
 
-      <Bounds fit clip observe margin={1.2}>
+      <Bounds fit clip margin={1.2}>
         <primitive object={localCar} />
       </Bounds>
 
       {/* Tyre mod — inside Canvas so R3F picks up the scene change immediately */}
       {selectedParts.tyres?.model && (
         <Suspense fallback={null}>
-          <TyreMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.tyres.model} />
+          <TyreMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.tyres.model} sizeMul={selectedParts.tyres.sizeMul} />
         </Suspense>
       )}
 
-      {selectedParts.frontBumpers?.model && (
+      {/* Bumper / spoiler add-on geometry — skipped for cars that don't fit it (e.g. Hilux) */}
+      {!profile.hideExteriorMods && selectedParts.frontBumpers?.model && (
         <Suspense fallback={null}>
           <BumperMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.frontBumpers.model} />
         </Suspense>
       )}
 
-      {selectedParts.frontLights?.model && (
-        <Suspense fallback={null}>
-          <FrontLightsMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.frontLights.model} />
-        </Suspense>
-      )}
-
-      {selectedParts.rearBumper?.model && (
+      {!profile.hideExteriorMods && selectedParts.rearBumper?.model && (
         <Suspense fallback={null}>
           <RearBumperMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.rearBumper.model} />
         </Suspense>
       )}
 
-      {selectedParts.spoiler?.model && (
+      {!profile.hideExteriorMods && selectedParts.spoiler?.model && (
         <Suspense fallback={null}>
           <SpoilerMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.spoiler.model} />
         </Suspense>
       )}
 
-      {selectedParts.rearLights?.model && (
-        <Suspense fallback={null}>
-          <RearLightsMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.rearLights.model} />
-        </Suspense>
+      {/* Lights — restyle the car's own lights, or add geometry for cars that need it */}
+      <LightRestyle
+        carModel={localCar}
+        frontMod={selectedParts.frontLights?.name}
+        rearMod={selectedParts.rearLights?.name}
+        paintMaterials={profile.paintMaterials}
+        frontEnabled={frontOn}
+        rearEnabled={rearOn}
+      />
+      {!profile.restyleLights && (
+        <>
+          {frontOn && selectedParts.frontLights?.model && (
+            <Suspense fallback={null}>
+              <FrontLightsMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.frontLights.model} />
+            </Suspense>
+          )}
+          {rearOn && selectedParts.rearLights?.model && (
+            <Suspense fallback={null}>
+              <RearLightsMod carModel={localCar} carBox={localCarBox} profile={profile} path={selectedParts.rearLights.model} />
+            </Suspense>
+          )}
+        </>
       )}
+
+      <VehicleLightAura
+        carBox={localCarBox}
+        frontEnabled={frontOn}
+        rearEnabled={rearOn}
+        frontMod={selectedParts.frontLights?.name}
+        rearMod={selectedParts.rearLights?.name}
+        performanceMode={performanceMode}
+      />
 
       <CameraController preset={cameraPreset} />
       <ShowroomFloor carBox={localCarBox} />
+
+      {tuning && <TuningEffects carModel={localCar} tuning={tuning} />}
+      {tuning && tuning.neonColor !== "off" && (
+        <NeonUnderglow carBox={localCarBox} presetKey={tuning.neonColor} pulse={tuning.neonPulse} />
+      )}
 
       {(() => {
         const cl = localCarBox
@@ -662,6 +1037,10 @@ function ShowroomFloor({ carBox }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function Garage() {
   const { addToCart } = useCart();
+  const { builds: savedBuilds, saveBuild, deleteBuild, unauthorized: buildsUnauthorized } = useSavedBuilds();
+  const [buildName, setBuildName] = useState("");
+  const [savingBuild, setSavingBuild] = useState(false);
+  const [showLoadList, setShowLoadList] = useState(false);
 
   const [selectedColor, setSelectedColor] = useState({
     hex: DEFAULT_BODY_PAINT,
@@ -682,12 +1061,49 @@ export default function Garage() {
   const [windowTint, setWindowTint]         = useState(0);
   const [cameraPreset, setCameraPreset]     = useState(null);
 
+  // ── 3DTuning-style state: rim/caliper color, two-tone accents, neon underglow,
+  //    wheel size multiplier. Single object so save/load round-trips cleanly.
+  const [tuning, setTuning] = useState({
+    rimColor:     "factory",
+    caliperColor: "factory",
+    roofAccent:   "off",
+    hoodAccent:   "off",
+    wheelSizeMul:   1.0,
+    neonColor:      "off",
+    neonPulse:      false,
+    frontLightsOn:  true,
+    rearLightsOn:   true,
+  });
+  const setTune = useCallback(
+    (key, value) => setTuning(prev => ({ ...prev, [key]: value })),
+    []
+  );
+
   const [searchParams] = useSearchParams();
   const modelUrl    = searchParams.get("modelUrl");
   const carMake     = searchParams.get("make")  || "";
   const carName     = searchParams.get("name")  || "";
   const carYear     = searchParams.get("year")  || "";
   const displayTitle = [carMake, carName, carYear].filter(Boolean).join(" ") || "Custom Build";
+
+  // Per-car mod tabs — some cars hide the bumper/spoiler ("Exterior") geometry mods.
+  const carProfile = useMemo(() => getCustomizationProfile(carMake, modelUrl), [carMake, modelUrl]);
+
+  // Which Tune-tab controls have a target mesh on the current model. Hilux,
+  // for example, has no separable hood/roof/caliper mesh — we hide those
+  // controls instead of leaving them as silent no-ops.
+  const tuneCaps = useMemo(() => detectTuneCapabilities(carModel), [carModel]);
+
+  const modTabs = useMemo(() => {
+    const tabs = { ...MOD_TABS };
+    if (carProfile.hideExteriorMods) delete tabs.Exterior;
+    return tabs;
+  }, [carProfile]);
+
+  // If the active sub-tab is no longer available, fall back to the first one.
+  useEffect(() => {
+    if (!modTabs[modSubTab]) setModSubTab(Object.keys(modTabs)[0] || "Exterior");
+  }, [modTabs, modSubTab]);
 
   const engineAudioRef = useRef(null);
   const revAudioRef    = useRef(null);
@@ -725,20 +1141,36 @@ export default function Garage() {
 
   // Mod selection (click again = deselect)
   const handleModSelect = (category, mod) => {
+    const isDeselect = selectedMods[category]?.name === mod.name;
     setSelectedMods(prev => {
       const cur = prev[category];
       return { ...prev, [category]: cur?.name === mod.name ? null : mod };
     });
+    // Selecting a light type is meaningless while that light is switched off —
+    // restyleLights restores the factory material when the toggle is off, so the
+    // choice would have no visible effect. Auto-enable the matching switch so the
+    // selected style (Xenon/LED/Smoked) actually shows on the car.
+    if (!isDeselect) {
+      if (category === "Front Lights") setTune("frontLightsOn", true);
+      else if (category === "Rear Lights") setTune("rearLightsOn", true);
+    }
   };
 
-  // camelCase keys for scene consumption
+  // camelCase keys for scene consumption — multiplies the chosen tyre's sizeMul
+  // by the global wheel-size slider so the Tune control affects any tyre choice.
   const cmParts = useMemo(() => {
     const out = {};
     for (const [cat, mod] of Object.entries(selectedMods)) {
-      if (mod) out[MOD_CATEGORY_MAP[cat] ?? cat] = mod;
+      if (!mod) continue;
+      const key = MOD_CATEGORY_MAP[cat] ?? cat;
+      if (key === "tyres") {
+        out[key] = { ...mod, sizeMul: (mod.sizeMul ?? 1) * (tuning.wheelSizeMul ?? 1) };
+      } else {
+        out[key] = mod;
+      }
     }
     return out;
-  }, [selectedMods]);
+  }, [selectedMods, tuning.wheelSizeMul]);
 
   const selectedModsList = useMemo(
     () => Object.entries(selectedMods).filter(([, m]) => m).map(([cat, m]) => ({ category: cat, ...m })),
@@ -768,6 +1200,64 @@ export default function Garage() {
     setFeedbackMessage("Custom build added to cart.");
   };
 
+  // ── Save / Load handlers ────────────────────────────────────────────────
+  const collectBuildConfig = () => ({
+    selectedColor,
+    paintFinish,
+    selectedMods,
+    suspensionOffset,
+    windowTint,
+    tuning,
+  });
+
+  const handleSaveBuild = async () => {
+    if (buildsUnauthorized) {
+      setFeedbackMessage("Login to save builds.");
+      return;
+    }
+    const name = (buildName || displayTitle).trim();
+    if (!name) { setFeedbackMessage("Give your build a name first."); return; }
+    setSavingBuild(true);
+    try {
+      await saveBuild({
+        name,
+        car_make: carMake || "Unknown",
+        car_model: carName || "Unknown",
+        car_year: carYear ? parseInt(carYear, 10) : null,
+        model_url: modelUrl,
+        config: collectBuildConfig(),
+      });
+      setBuildName("");
+      setFeedbackMessage(`Saved "${name}".`);
+    } catch (err) {
+      setFeedbackMessage(err.message || "Save failed.");
+    } finally {
+      setSavingBuild(false);
+    }
+  };
+
+  const handleLoadBuild = (build) => {
+    const cfg = build.config || {};
+    if (cfg.selectedColor) setSelectedColor(cfg.selectedColor);
+    if (cfg.paintFinish) setPaintFinish(cfg.paintFinish);
+    if (cfg.selectedMods) setSelectedMods(cfg.selectedMods);
+    if (typeof cfg.suspensionOffset === "number") setSuspensionOffset(cfg.suspensionOffset);
+    if (typeof cfg.windowTint === "number") setWindowTint(cfg.windowTint);
+    if (cfg.tuning) setTuning(prev => ({ ...prev, ...cfg.tuning }));
+    setShowLoadList(false);
+    setFeedbackMessage(`Loaded "${build.name}".`);
+  };
+
+  const handleDeleteBuild = async (id, e) => {
+    e?.stopPropagation();
+    try {
+      await deleteBuild(id);
+      setFeedbackMessage("Build deleted.");
+    } catch (err) {
+      setFeedbackMessage(err.message || "Delete failed.");
+    }
+  };
+
   const handleReset = () => {
     setSelectedMods({}); setOpenAccordion(null);
     setCarModel(null); setCarBox(null);
@@ -776,6 +1266,12 @@ export default function Garage() {
     setSuspensionOffset(0);
     setWindowTint(0);
     setCameraPreset(null);
+    setTuning({
+      rimColor: "factory", caliperColor: "factory",
+      roofAccent: "off", hoodAccent: "off",
+      wheelSizeMul: 1.0, neonColor: "off", neonPulse: false,
+      frontLightsOn: true, rearLightsOn: true,
+    });
     setFeedbackMessage("Build reset to showroom defaults.");
   };
 
@@ -828,7 +1324,7 @@ export default function Garage() {
             dpr={performanceMode ? 1 : [1, 2]}
             shadows={!performanceMode}
             camera={{ position: [5, 2, 8], fov: 45 }}
-            gl={{ toneMapping: 4, toneMappingExposure: 1.15 }}
+            gl={{ toneMapping: THREE.NeutralToneMapping, toneMappingExposure: 1.0 }}
             style={{ width: "100%", height: "100%" }}
           >
             <CarScene
@@ -843,6 +1339,7 @@ export default function Garage() {
               suspensionOffset={suspensionOffset}
               windowTint={windowTint}
               cameraPreset={cameraPreset}
+              tuning={tuning}
             />
           </Canvas>
 
@@ -983,7 +1480,7 @@ export default function Garage() {
               <div>
                 {/* Mod sub-tabs */}
                 <div className="mb-4 flex gap-1 rounded-xl bg-white/5 p-1">
-                  {Object.keys(MOD_TABS).map(sub => (
+                  {Object.keys(modTabs).map(sub => (
                     <button
                       key={sub}
                       onClick={() => setModSubTab(sub)}
@@ -998,8 +1495,50 @@ export default function Garage() {
                   ))}
                 </div>
 
+                {/* Independent front / rear light switches — shown only on the
+                    Lights sub-tab. The whole card acts as the switch: yellow +
+                    glow when On, dim when Off. No pill — nothing can overflow. */}
+                {modSubTab === "Lights" && (
+                  <div className="mb-3 grid grid-cols-2 gap-2">
+                    {[
+                      { key: "frontLightsOn", label: "Front Lights" },
+                      { key: "rearLightsOn",  label: "Rear Lights"  },
+                    ].map(({ key, label }) => {
+                      const on = tuning[key];
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          onClick={() => setTune(key, !on)}
+                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                            on
+                              ? "border-yellow-300/55 bg-yellow-300/10 text-white shadow-[0_0_18px_rgba(250,204,21,0.18)]"
+                              : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/20 hover:bg-white/[0.08]"
+                          }`}
+                        >
+                          <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${
+                            on ? "bg-yellow-300 text-black" : "bg-white/10 text-gray-400"
+                          }`}>
+                            <Lightbulb className="h-4 w-4" />
+                          </span>
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate text-[12px] font-semibold leading-tight">{label}</span>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider leading-tight ${
+                              on ? "text-yellow-300" : "text-gray-500"
+                            }`}>
+                              {on ? "On" : "Off"}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  {(MOD_TABS[modSubTab] ?? []).map(category => {
+                  {(modTabs[modSubTab] ?? []).map(category => {
                     const options  = BASE_MODS[category] ?? [];
                     const isOpen   = openAccordion === category;
                     const selected = selectedMods[category];
@@ -1053,12 +1592,12 @@ export default function Garage() {
                   <div className="mb-3 flex items-center justify-between">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Suspension Height</p>
                     <span className="text-xs font-semibold text-red-400">
-                      {suspensionOffset > 0 ? `+${(suspensionOffset * 100).toFixed(0)}mm` : suspensionOffset < 0 ? `${(suspensionOffset * 100).toFixed(0)}mm` : "Stock"}
+                      {suspensionOffset > 0 ? `+${(suspensionOffset * 100).toFixed(0)}cm` : suspensionOffset < 0 ? `${(suspensionOffset * 100).toFixed(0)}cm` : "Stock"}
                     </span>
                   </div>
                   <input
                     type="range"
-                    min="-0.30"
+                    min="-0.12"
                     max="0.10"
                     step="0.01"
                     value={suspensionOffset}
@@ -1092,6 +1631,202 @@ export default function Garage() {
                     ))}
                   </div>
                 </div>
+
+                {/* Vehicle light switches — separate front / rear */}
+                <div>
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Vehicle Lights</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { key: "frontLightsOn", label: "Front Lights" },
+                      { key: "rearLightsOn",  label: "Rear Lights"  },
+                    ].map(({ key, label }) => {
+                      const on = tuning[key];
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          role="switch"
+                          aria-checked={on}
+                          onClick={() => setTune(key, !on)}
+                          className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                            on
+                              ? "border-yellow-300/55 bg-yellow-300/10 text-white shadow-[0_0_18px_rgba(250,204,21,0.18)]"
+                              : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-white/20 hover:bg-white/[0.08]"
+                          }`}
+                        >
+                          <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors ${
+                            on ? "bg-yellow-300 text-black" : "bg-white/10 text-gray-400"
+                          }`}>
+                            <Lightbulb className="h-4 w-4" />
+                          </span>
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className="truncate text-[12px] font-semibold leading-tight">{label}</span>
+                            <span className={`text-[10px] font-semibold uppercase tracking-wider leading-tight ${
+                              on ? "text-yellow-300" : "text-gray-500"
+                            }`}>
+                              {on ? "On" : "Off"}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Wheel Size</p>
+                    <span className="text-xs font-semibold text-red-400">
+                      {tuning.wheelSizeMul === 1 ? "Stock" : `${tuning.wheelSizeMul > 1 ? "+" : ""}${((tuning.wheelSizeMul - 1) * 100).toFixed(0)}%`}
+                    </span>
+                  </div>
+                  <input
+                    type="range" min="0.85" max="1.20" step="0.01"
+                    value={tuning.wheelSizeMul}
+                    onChange={e => setTune("wheelSizeMul", parseFloat(e.target.value))}
+                    className="w-full accent-red-500"
+                  />
+                </div>
+
+                {/* ── Rim color ─────────────────────────────────────────── */}
+                {tuneCaps.rim && (
+                <div>
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Rim Finish</p>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {Object.entries(RIM_COLORS).map(([key, c]) => (
+                      <button
+                        key={key}
+                        onClick={() => setTune("rimColor", key)}
+                        title={c.label}
+                        className={`flex flex-col items-center gap-1 rounded-xl border py-1.5 text-[9px] font-semibold transition-all ${
+                          tuning.rimColor === key
+                            ? "border-red-500 bg-red-500/15 text-white"
+                            : "border-white/10 bg-white/5 text-gray-400 hover:border-white/20"
+                        }`}
+                      >
+                        <span className="h-4 w-4 rounded-full border border-white/20"
+                              style={{ background: c.hex || "transparent",
+                                       boxShadow: c.hex ? `inset 0 0 4px rgba(0,0,0,0.4)` : undefined }} />
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {/* ── Caliper color ─────────────────────────────────────── */}
+                {tuneCaps.caliper && (
+                <div>
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Brake Calipers</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {Object.entries(CALIPER_COLORS).map(([key, c]) => (
+                      <button
+                        key={key}
+                        onClick={() => setTune("caliperColor", key)}
+                        title={c.label}
+                        className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[10px] font-semibold transition-all ${
+                          tuning.caliperColor === key
+                            ? "border-red-500 bg-red-500/15 text-white"
+                            : "border-white/10 bg-white/5 text-gray-400 hover:border-white/20"
+                        }`}
+                      >
+                        <span className="h-3 w-3 flex-shrink-0 rounded-full border border-white/20"
+                              style={{ background: c.hex || "transparent" }} />
+                        <span className="truncate">{c.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {/* ── Roof accent (two-tone) ────────────────────────────── */}
+                {tuneCaps.roof && (
+                <div>
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Roof Wrap</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {Object.entries(ACCENT_COLORS).map(([key, c]) => (
+                      <button
+                        key={key}
+                        onClick={() => setTune("roofAccent", key)}
+                        className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[10px] font-semibold transition-all ${
+                          tuning.roofAccent === key
+                            ? "border-red-500 bg-red-500/15 text-white"
+                            : "border-white/10 bg-white/5 text-gray-400 hover:border-white/20"
+                        }`}
+                      >
+                        <span className="h-3 w-3 flex-shrink-0 rounded-full border border-white/20"
+                              style={{ background: c.hex || "transparent" }} />
+                        <span className="truncate">{c.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {/* ── Hood accent (carbon hood / two-tone) ──────────────── */}
+                {tuneCaps.hood && (
+                <div>
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Hood Wrap</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {Object.entries(ACCENT_COLORS).map(([key, c]) => (
+                      <button
+                        key={key}
+                        onClick={() => setTune("hoodAccent", key)}
+                        className={`flex items-center gap-1.5 rounded-xl border px-2 py-1.5 text-[10px] font-semibold transition-all ${
+                          tuning.hoodAccent === key
+                            ? "border-red-500 bg-red-500/15 text-white"
+                            : "border-white/10 bg-white/5 text-gray-400 hover:border-white/20"
+                        }`}
+                      >
+                        <span className="h-3 w-3 flex-shrink-0 rounded-full border border-white/20"
+                              style={{ background: c.hex || "transparent" }} />
+                        <span className="truncate">{c.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                )}
+
+                {/* ── Neon underglow ────────────────────────────────────── */}
+                <div>
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Neon Underglow</p>
+                    <label className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="accent-red-500"
+                        checked={tuning.neonPulse}
+                        onChange={e => setTune("neonPulse", e.target.checked)}
+                      />
+                      Pulse
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {Object.entries(NEON_COLORS).map(([key, c]) => (
+                      <button
+                        key={key}
+                        onClick={() => setTune("neonColor", key)}
+                        title={c.label}
+                        className={`flex flex-col items-center gap-1 rounded-xl border py-1.5 text-[9px] font-semibold transition-all ${
+                          tuning.neonColor === key
+                            ? "border-red-500 bg-red-500/15 text-white"
+                            : "border-white/10 bg-white/5 text-gray-400 hover:border-white/20"
+                        }`}
+                      >
+                        <span
+                          className="h-4 w-4 rounded-full"
+                          style={{
+                            background: c.hex == null ? "transparent" : `#${c.hex.toString(16).padStart(6, "0")}`,
+                            boxShadow: c.hex == null
+                              ? "inset 0 0 0 1.5px rgba(255,255,255,0.18)"
+                              : `0 0 8px #${c.hex.toString(16).padStart(6, "0")}`,
+                          }}
+                        />
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1117,7 +1852,70 @@ export default function Garage() {
                   ))}
                 </div>
               )}
-              <div className="mt-5 grid gap-2.5">
+              {/* ── Save / Load builds ─────────────────────────────────── */}
+              <div className="mt-5 rounded-xl border border-white/8 bg-black/30 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gray-500">My Saved Builds</p>
+                  {savedBuilds.length > 0 && (
+                    <button
+                      onClick={() => setShowLoadList(v => !v)}
+                      className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-gray-300 hover:bg-white/10"
+                    >
+                      {showLoadList ? "Hide" : `Load (${savedBuilds.length})`}
+                    </button>
+                  )}
+                </div>
+                {buildsUnauthorized ? (
+                  <p className="text-[11px] text-gray-500">
+                    <Link to="/login" className="text-red-400 underline">Log in</Link> to save and load builds across devices.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={buildName}
+                        onChange={e => setBuildName(e.target.value)}
+                        placeholder={displayTitle}
+                        className="flex-1 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-xs text-white placeholder-gray-600 outline-none focus:border-red-500/60"
+                      />
+                      <button
+                        onClick={handleSaveBuild}
+                        disabled={savingBuild}
+                        className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition-all hover:bg-red-500 disabled:opacity-50"
+                      >
+                        {savingBuild ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                    {showLoadList && savedBuilds.length > 0 && (
+                      <div className="mt-2 max-h-44 space-y-1 overflow-y-auto custom-scrollbar pr-1">
+                        {savedBuilds.map(b => (
+                          <button
+                            key={b.id}
+                            onClick={() => handleLoadBuild(b)}
+                            className="flex w-full items-center justify-between gap-2 rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2 text-left text-xs text-gray-200 transition-all hover:border-red-500/40 hover:bg-red-500/5"
+                          >
+                            <span className="min-w-0 flex-1 truncate">
+                              <span className="font-semibold">{b.name}</span>
+                              <span className="ml-2 text-[10px] text-gray-500">
+                                {b.car_make} {b.car_model}
+                              </span>
+                            </span>
+                            <span
+                              onClick={(e) => handleDeleteBuild(b.id, e)}
+                              className="shrink-0 rounded-md border border-white/10 px-1.5 py-0.5 text-[10px] text-gray-500 hover:border-red-500/40 hover:text-red-400"
+                            >
+                              Delete
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="mt-3 grid gap-2.5">
                 <button onClick={handleAddToCart}
                   className="w-full rounded-2xl bg-gradient-to-r from-red-600 to-red-500 py-3 font-bold tracking-wide text-white shadow-[0_0_20px_rgba(220,38,38,0.25)] transition-all hover:-translate-y-0.5 hover:from-red-500 hover:to-red-400">
                   Add Build To Cart
@@ -1142,6 +1940,7 @@ export default function Garage() {
               selectedPartCategories={selectedModsList.map(m => m.category)}
               onPartApplied={handleAIPartApplied}
               carModelRef={carModel}
+              paintMaterials={getCustomizationProfile(carMake, modelUrl).paintMaterials}
             />
 
             {/* Engine audio */}

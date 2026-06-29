@@ -1,14 +1,13 @@
-import { useCart } from "@/context/CartContext.jsx";
+import { useCart } from "@/hooks/useCart";
 import Navbar from "@/components/ui/navbar";
 import Footer from "@/components/ui/footer";
 import ProductVisual from "@/components/ui/ProductVisual";
 import { useNavigate, Link } from "react-router-dom";
 
 export default function ShoppingCart() {
-  const { cart, updateQuantity, removeFromCart } = useCart();
+  const { cart, cartCount, subtotal, incrementQuantity, decrementQuantity, removeFromCart } = useCart();
   const navigate = useNavigate();
 
-  const subtotal = cart.reduce((total, item) => total + item.price * item.quantity, 0);
   const shipping = 250;
   const total = subtotal > 0 ? subtotal + shipping : 0;
 
@@ -25,7 +24,7 @@ export default function ShoppingCart() {
                 Shopping Cart
               </h1>
               <p className="mt-2 text-gray-400">
-                You have <span className="font-bold text-red-500">{cart.length}</span> items in your cart.
+                You have <span className="font-bold text-red-500">{cartCount}</span> items in your cart.
               </p>
             </div>
             {cart.length > 0 && (
@@ -115,7 +114,7 @@ export default function ShoppingCart() {
                                 {/* Quantity Selector */}
                                 <div className="flex items-center bg-black/50 rounded-xl border border-white/10 overflow-hidden w-fit">
                                   <button
-                                    onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                                    onClick={() => decrementQuantity(item.id)}
                                     className="px-3 py-2 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
                                   >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -124,7 +123,7 @@ export default function ShoppingCart() {
                                   </button>
                                   <span className="w-10 text-center font-semibold text-white text-sm">{item.quantity}</span>
                                   <button
-                                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                    onClick={() => incrementQuantity(item.id)}
                                     className="px-3 py-2 text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
                                   >
                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

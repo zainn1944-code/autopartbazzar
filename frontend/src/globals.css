@@ -89,6 +89,18 @@ html.dark {
   --card-bg: #0f0f14;
 }
 
+/* Keep Chrome's autofill from painting inputs light on dark auth screens.
+   The big inset shadow repaints the fill; text-fill-color keeps the text white. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #ffffff;
+  -webkit-box-shadow: 0 0 0px 1000px #000000 inset;
+  caret-color: #ffffff;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);

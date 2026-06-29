@@ -5,10 +5,42 @@ import httpx
 from sqlalchemy.future import select
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from config import get_settings
 from database import AsyncSessionLocal
 from models.product import Product
 
 logger = logging.getLogger(__name__)
+
+BIKE_KEYWORDS = (
+    "bike",
+    "motorcycle",
+    "motorbike",
+    "scooter",
+    "moped",
+    "vespa",
+    "cd70",
+    "cd 70",
+    "cd125",
+    "cd 125",
+    "cg125",
+    "cg 125",
+    "honda 125",
+    "yamaha ybr",
+    "ybr",
+    "pridor",
+    "road prince",
+    "70cc",
+    "100cc",
+    "110cc",
+    "125cc",
+    "150cc",
+)
+
+
+def _is_bike_product(title: str | None) -> bool:
+    haystack = (title or "").lower()
+    return any(keyword in haystack for keyword in BIKE_KEYWORDS)
+
 
 async def fetch_and_store_daily_parts():
     """
@@ -27,10 +59,16 @@ async def fetch_and_store_daily_parts():
         logger.error(f"Failed to fetch data from internet: {e}")
         return
 
-    products_fetched = data.get("products", [])
+    products_fetched = [
+        product for product in data.get("products", [])
+        if not _is_bike_product(product.get("title"))
+    ]
     if not products_fetched:
         logger.info("No new products found on the internet today.")
         return
+
+    settings = get_settings()
+    markup_factor = 1 + (getattr(settings, "parts_markup_percent", 0.0) / 100.0)
 
     added_count = 0
     async with AsyncSessionLocal() as session:
@@ -39,13 +77,16 @@ async def fetch_and_store_daily_parts():
             stmt = select(Product).where(Product.name == p["title"])
             result = await session.execute(stmt)
             existing = result.scalars().first()
-            
+
             if not existing:
+                base_price = float(p.get("price", 0))
+                final_price = round(base_price * markup_factor, 2)
+                final_original = round(base_price * 1.2 * markup_factor, 2)
                 new_product = Product(
                     product_id=str(uuid.uuid4()),
                     name=p.get("title"),
-                    price=float(p.get("price", 0)),
-                    original_price=float(p.get("price", 0)) * 1.2, # Fake original price for discount
+                    price=final_price,
+                    original_price=final_original, # Fake original price for discount
                     category="Accessories", # Map dummy json category to ours
                     make="Universal",
                     city="Global",

@@ -3,9 +3,11 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from config import get_settings
 from database import get_db
 from dependencies import get_current_user, require_admin_user
 from models.order import Order, OrderItem
@@ -13,12 +15,82 @@ from models.product import Product
 from models.user import User
 from schemas.order import OrderCreate
 from services.email_service import send_order_confirmation_email
+from services.payment_service import build_jazzcash_payment, build_mock_payment
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
 VALID_STATUSES = {"Pending", "Processing", "Shipped", "Delivered", "Cancelled"}
+VALID_PAYMENT_METHODS = {"COD", "JazzCash"}
+FLAT_SHIPPING_RATE = 250
+
+
+def _serialize_order(order: Order, lines: list[OrderItem], payment: dict | None = None) -> dict:
+    subtotal = sum(float(li.price) * li.quantity for li in lines)
+    shipping_amount = FLAT_SHIPPING_RATE if subtotal > 0 else 0
+    return {
+        "id": order.id,
+        "_id": str(order.id),
+        "user": order.user_id,
+        "items": [
+            {
+                "product": li.product_id,
+                "quantity": li.quantity,
+                "price": li.price,
+                "snapshot": li.snapshot,
+            }
+            for li in lines
+        ],
+        "subtotalAmount": subtotal,
+        "shippingAmount": shipping_amount,
+        "totalAmount": order.total_amount,
+        "status": order.status,
+        "paymentStatus": order.payment_status,
+        "paymentMethod": order.payment_method,
+        "shippingAddress": order.shipping_address,
+        "orderDate": order.order_date.isoformat() if order.order_date else None,
+        # Present only for online payment — frontend auto-submits this to JazzCash.
+        "payment": payment,
+    }
+
+
+async def _order_with_items(db: AsyncSession, order: Order) -> dict:
+    r = await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
+    return _serialize_order(order, r.scalars().all())
+
+
+async def notify_order_confirmed(db: AsyncSession, order: Order) -> None:
+    """Send the order-confirmation email (best-effort, never raises)."""
+    try:
+        items_r = await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
+        lines = items_r.scalars().all()
+        user_r = await db.execute(select(User).where(User.id == order.user_id))
+        user = user_r.scalar_one_or_none()
+        if user is None or not user.email:
+            return
+        email_items = [
+            {
+                "name": li.snapshot.get("name", "Item") if li.snapshot else "Item",
+                "quantity": li.quantity,
+                "price": li.price,
+            }
+            for li in lines
+        ]
+        subtotal = sum(float(li.price) * li.quantity for li in lines)
+        shipping_fee = FLAT_SHIPPING_RATE if subtotal > 0 else 0
+        send_order_confirmation_email(
+            user.email,
+            order.id,
+            order.total_amount,
+            email_items,
+            shipping_address=order.shipping_address,
+            subtotal=subtotal,
+            shipping_fee=shipping_fee,
+            payment_method=order.payment_method,
+        )
+    except Exception as exc:  # pragma: no cover - email is non-critical
+        logger.warning("Order confirmation email failed: %s", exc)
 
 
 class OrderStatusUpdate(BaseModel):
@@ -54,6 +126,28 @@ def _build_item_snapshot(line: OrderItem, product: Product | None = None) -> dic
     }
 
 
+def _catalog_snapshot(product: Product) -> dict:
+    return {
+        "itemType": "catalog",
+        "name": product.name,
+        "make": product.make,
+        "category": product.category,
+        "imageUrl": product.image_url,
+        "productRef": product.product_id,
+    }
+
+
+def _snapshot_price(snapshot: dict | None, fallback_price: float) -> float:
+    if not snapshot:
+        return float(fallback_price)
+
+    selected_parts = snapshot.get("selectedParts")
+    if not isinstance(selected_parts, list) or not selected_parts:
+        return float(fallback_price)
+
+    return sum(float(part.get("price") or 0) for part in selected_parts)
+
+
 @router.post("")
 async def create_order(
     body: OrderCreate,
@@ -63,81 +157,135 @@ async def create_order(
     if not body.items:
         raise HTTPException(status_code=400, detail="Cart is empty")
 
-    order = Order(
-        user_id=user.id,
-        total_amount=body.totalAmount,
-        status="Pending",
-        payment_status="Pending",
-        shipping_address=body.shippingAddress.model_dump(),
-    )
-    db.add(order)
-    await db.flush()
+    payment_method = body.paymentMethod or "COD"
+    if payment_method not in VALID_PAYMENT_METHODS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid payment method. Must be one of: {', '.join(VALID_PAYMENT_METHODS)}",
+        )
+    online_provider = None
+    if payment_method == "JazzCash":
+        online_provider = get_settings().online_payment_provider
+        if online_provider is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Online payment is not available right now. Please choose Cash on Delivery.",
+            )
+
+    # Idempotency: a retried submit with the same key returns the original order
+    # instead of creating a duplicate (and re-charging / re-decrementing stock).
+    idem_key = (body.idempotencyKey or "").strip() or None
+    if idem_key:
+        existing = (
+            await db.execute(
+                select(Order).where(
+                    Order.idempotency_key == idem_key,
+                    Order.user_id == user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return await _order_with_items(db, existing)
+
+    prepared_items = []
+    subtotal = 0.0
 
     for line in body.items:
         if line.product is None and not line.snapshot:
             raise HTTPException(status_code=400, detail="Each order line needs a product or snapshot")
 
         prod = await _resolve_product(db, line.product) if line.product is not None else None
+
+        if prod is not None:
+            if prod.is_live_listing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{prod.name} is an external listing and cannot be checked out here",
+                )
+            if prod.stock_quantity < line.quantity:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Only {prod.stock_quantity} units available for {prod.name}",
+                )
+            unit_price = float(prod.price)
+            snapshot = _catalog_snapshot(prod)
+        else:
+            unit_price = _snapshot_price(line.snapshot, line.price)
+            snapshot = line.snapshot
+
+        subtotal += unit_price * line.quantity
+        prepared_items.append(
+            {
+                "product": prod,
+                "quantity": line.quantity,
+                "price": unit_price,
+                "snapshot": snapshot,
+            }
+        )
+
+    shipping_amount = FLAT_SHIPPING_RATE if subtotal > 0 else 0
+    total_amount = subtotal + shipping_amount
+
+    order = Order(
+        user_id=user.id,
+        total_amount=total_amount,
+        status="Pending",
+        payment_status="Pending",
+        payment_method=payment_method,
+        idempotency_key=idem_key,
+        shipping_address=body.shippingAddress.model_dump(),
+    )
+    db.add(order)
+    await db.flush()
+
+    for line in prepared_items:
+        prod = line["product"]
+        if prod is not None:
+            prod.stock_quantity -= line["quantity"]
         item = OrderItem(
             order_id=order.id,
             product_id=prod.id if prod is not None else None,
-            quantity=line.quantity,
-            price=line.price,
-            snapshot=line.snapshot
-            or (
-                {
-                    "itemType": "catalog",
-                    "name": prod.name,
-                    "make": prod.make,
-                    "category": prod.category,
-                    "imageUrl": prod.image_url,
-                    "productRef": prod.product_id,
-                }
-                if prod is not None
-                else None
-            ),
+            quantity=line["quantity"],
+            price=line["price"],
+            snapshot=line["snapshot"],
         )
         db.add(item)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Concurrent duplicate submit raced us on the unique idempotency key.
+        await db.rollback()
+        if idem_key:
+            existing = (
+                await db.execute(
+                    select(Order).where(
+                        Order.idempotency_key == idem_key,
+                        Order.user_id == user.id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                return await _order_with_items(db, existing)
+        raise
     await db.refresh(order)
 
     items_r = await db.execute(select(OrderItem).where(OrderItem.order_id == order.id))
     lines = items_r.scalars().all()
 
-    # Send order confirmation email (best-effort, never block the response)
-    try:
-        email_items = [
-            {
-                "name": li.snapshot.get("name", "Item") if li.snapshot else "Item",
-                "quantity": li.quantity,
-                "price": li.price,
-            }
-            for li in lines
-        ]
-        send_order_confirmation_email(user.email, order.id, order.total_amount, email_items)
-    except Exception as exc:
-        logger.warning("Order confirmation email failed: %s", exc)
+    # For COD the order is final now, so send the confirmation email immediately.
+    # For online payment we wait until the gateway confirms (callback / mock-complete).
+    payment = None
+    if payment_method == "JazzCash":
+        if online_provider == "jazzcash":
+            description = f"Auto Part Bazar order #{order.id}"
+            payment = build_jazzcash_payment(order.id, order.total_amount, description)
+        else:  # built-in demo gateway
+            payment = build_mock_payment(order.id, order.total_amount)
+    else:
+        await notify_order_confirmed(db, order)
 
-    return {
-        "id": order.id,
-        "_id": str(order.id),
-        "user": order.user_id,
-        "items": [
-            {
-                "product": li.product_id,
-                "quantity": li.quantity,
-                "price": li.price,
-                "snapshot": li.snapshot,
-            }
-            for li in lines
-        ],
-        "totalAmount": order.total_amount,
-        "status": order.status,
-        "paymentStatus": order.payment_status,
-        "shippingAddress": order.shipping_address,
-        "orderDate": order.order_date.isoformat() if order.order_date else None,
-    }
+    return _serialize_order(order, lines, payment=payment)
 
 
 @router.get("/me")
